@@ -11,8 +11,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Run Python Tests
+  unit-tests:
+    name: Run Unit and Workflow Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -29,8 +29,52 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install -r requirements.txt
 
       - name: Run unit and workflow tests
+        run: python -m pytest -q --ignore=tests/integration
+
+  integration-tests:
+    name: Run MySQL Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: ai_learning_planner_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=30s
+
+    env:
+      ALLOW_MYSQL_INTEGRATION_TESTS: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
         run: |
-          python -m pytest -q --ignore=tests/integration
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Verify MySQL test database
+        run: |
+          python -c "import pymysql; c=pymysql.connect(host='127.0.0.1', user='root', password='root', database='ai_learning_planner_test'); cur=c.cursor(); cur.execute('SELECT DATABASE()'); name=cur.fetchone()[0]; print('Connected database:', name); assert name == 'ai_learning_planner_test'; c.close()"
+
+      - name: Run MySQL integration tests
+        run: python -m pytest -q tests/integration
