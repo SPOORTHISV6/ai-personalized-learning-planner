@@ -1,0 +1,12 @@
+PDF: python_oop.pdf
+Extracted characters: 2337
+Potentially suspicious lines: 4
+
+Page 1, line 17: 4. Encapsulation
+  Possible issues: Possible fragmented text
+Page 1, line 24: def speak(self):
+  Possible issues: Possible fragmented text
+Page 1, line 26: class Dog(Animal):
+  Possible issues: Possible fragmented text
+Page 1, line 27: def speak(self):
+  Possible issues: Possible fragmented text

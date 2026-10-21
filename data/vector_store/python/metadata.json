@@ -1,0 +1,110 @@
+[
+  {
+    "chunk_id": 0,
+    "page_number": 1,
+    "section_title": "General",
+    "content": "Section: General\nPYTHON OBJECT-ORIENTED\nPROGRAMMING\nCorrected Study Guide for RAG Retrieval\nThis version restores the missing Section 2, uses consistent section numbering, and includes clear definitions,\nrunnable examples, and revision notes so the retrieval index can identify individual OOP concepts.\nContents"
+  },
+  {
+    "chunk_id": 1,
+    "page_number": 2,
+    "section_title": "Introduction to OOP",
+    "content": "Section: Introduction to OOP\nObject-Oriented Programming (OOP) is a programming approach that organizes code around objects. An object\ncombines data (attributes) and behavior (methods). Python supports OOP through classes, objects, inheritance,\nencapsulation, polymorphism, and abstraction.\nOOP is useful when a program models entities with state and behavior, such as students, bank accounts,\nproducts, or learning resources.\nClass: a definition or blueprint describing the attributes and methods its objects can have.\nObject: a particular instance created from a class.\nAttribute: data associated with an object or class.\nMethod: a function defined inside a class."
+  },
+  {
+    "chunk_id": 2,
+    "page_number": 2,
+    "section_title": "Classes and Objects",
+    "content": "Section: Classes and Objects\nA class defines a new type. An object is an instance of that class with its own state. For example, Student is a\nclass, while a particular student named Asha is an object.\nA class can contain attributes and methods. The dot operator accesses an object's attributes and methods.\nStudent is the class.\nstudent1 and student2 are separate objects.\nThe name attribute stores object-specific data.\nintroduce() is a method that describes object behavior.\nclass Student:\ndef introduce(self):\nprint(\"I am\", self.name)\nstudent1 = Student()\nstudent1.name = \"Asha\"\nstudent1.introduce()\nstudent2 = Student()\nstudent2.name = \"Ravi\"\nstudent2.introduce()\nA better design with __init__\nAttributes are commonly initialized in __init__ so every new object starts with the required data.\nclass Student:\ndef __init__(self, name, age):\nself.name = name\nself.age = age\ndef introduce(self):\nprint(f\"{self.name} is {self.age} years old\")\nstudent = Student(\"Asha\", 20)\nstudent.introduce()"
+  },
+  {
+    "chunk_id": 3,
+    "page_number": 2,
+    "section_title": "Constructor and self",
+    "content": "Section: Constructor and self\nIn Python, __init__ is the initializer that runs automatically after a new instance is created. It is commonly called\nthe constructor in beginner explanations, although __new__ is responsible for creating the instance itself.\nself refers to the current instance. It is the first parameter of ordinary instance methods, and Python passes the\nobject to it when the method is called through that object.\nself.brand is an instance attribute.\nbrand is a local parameter received by __init__.\nself is a conventional parameter name, not a Python keyword.\nDo not write self explicitly when calling laptop.show(); Python supplies it.\nclass Laptop:\ndef __init__(self, brand, ram):\nself.brand = brand\nself.ram = ram\ndef show(self):\nprint(self.brand, self.ram)\nlaptop = Laptop(\"Lenovo\", \"16 GB\")\nlaptop.show()"
+  },
+  {
+    "chunk_id": 4,
+    "page_number": 3,
+    "section_title": "Encapsulation",
+    "content": "Section: Encapsulation\nEncapsulation groups data and the methods that operate on it inside a class. It also provides a controlled\ninterface for accessing or updating an object's state.\nPython does not enforce traditional private access in the same way as some languages. A leading underscore\nsignals that an attribute is intended for internal use. Double-leading underscores trigger name mangling.\nUse methods to validate changes instead of allowing arbitrary updates.\n_balance is a convention for internal use, not strict access control.\nName mangling helps avoid accidental name clashes; it is not security.\nclass BankAccount:\ndef __init__(self, balance):\nself._balance = balance\ndef deposit(self, amount):\nif amount > 0:\nself._balance += amount\ndef get_balance(self):\nreturn self._balance\naccount = BankAccount(1000)\naccount.deposit(250)\nprint(account.get_balance()) # 1250"
+  },
+  {
+    "chunk_id": 5,
+    "page_number": 3,
+    "section_title": "Inheritance",
+    "content": "Section: Inheritance\nInheritance allows a class (child or subclass) to reuse or extend behavior from another class (parent or\nsuperclass). Use inheritance when the child represents a meaningful specialized form of the parent.\nDog inherits from Animal.\nThe child class can add methods or override inherited methods.\nsuper() can call behavior from the parent class.\nclass Animal:\nprint(\"Animal sound\")\nclass Dog(Animal):\nprint(\"Bark\")\ndog = Dog()\ndog.speak() # Bark"
+  },
+  {
+    "chunk_id": 6,
+    "page_number": 4,
+    "section_title": "Using super()",
+    "content": "Section: Using super()\nclass Person:\ndef __init__(self, name):\nself.name = name\nclass Student(Person):\ndef __init__(self, name, usn):\nsuper().__init__(name)\nself.usn = usn"
+  },
+  {
+    "chunk_id": 7,
+    "page_number": 4,
+    "section_title": "Polymorphism",
+    "content": "Section: Polymorphism\nPolymorphism means that the same operation or interface can work with objects of different types. In Python, this\noften appears through method overriding and duck typing.\nBoth objects provide speak(), so the loop can use them through the same interface.\nPython generally relies on supported behavior rather than requiring a shared declared interface.\nclass Cat:\nreturn \"Meow\"\nclass Dog:\nreturn \"Bark\"\nfor animal in (Cat(), Dog()):\nprint(animal.speak())"
+  },
+  {
+    "chunk_id": 8,
+    "page_number": 4,
+    "section_title": "Abstraction",
+    "content": "Section: Abstraction\nAbstraction exposes essential operations while hiding implementation details. Python's abc module supports\nabstract base classes that define methods subclasses must implement.\nShape defines the expected area() interface.\nRectangle implements the abstract method.\nAn abstract class with unimplemented abstract methods cannot be instantiated.\nfrom abc import ABC, abstractmethod\nclass Shape(ABC):\n@abstractmethod\ndef area(self):\npass\nclass Rectangle(Shape):\ndef __init__(self, width, height):\nself.width = width\nself.height = height\ndef area(self):\nreturn self.width * self.height\nprint(Rectangle(4, 3).area()) # 12"
+  },
+  {
+    "chunk_id": 9,
+    "page_number": 5,
+    "section_title": "Class vs Instance Variables",
+    "content": "Section: Class vs Instance Variables\nA class variable is stored on the class and is shared by instances unless an instance shadows it. An instance\nvariable belongs to a specific object.\nUse class variables for values intended to be shared.\nUse instance variables for per-object state.\nMutating a shared mutable class variable can affect all instances that use it.\nclass Employee:\ncompany = \"Acme\" # class variable\ndef __init__(self, name):\nself.name = name # instance variable\ne1 = Employee(\"Asha\")\ne2 = Employee(\"Ravi\")\nprint(e1.company, e2.company)\nprint(e1.name, e2.name)"
+  },
+  {
+    "chunk_id": 10,
+    "page_number": 5,
+    "section_title": "Special Methods",
+    "content": "Section: Special Methods\nSpecial methods, often called dunder methods because their names begin and end with double underscores, let\nuser-defined objects participate in Python language operations.\n__init__: initialize a newly created instance.\n__str__: provide a readable string representation.\n__len__: define behavior for len(object).\n__repr__: provide a representation useful for debugging.\nclass Book:\ndef __init__(self, title, pages):\nself.title = title\nself.pages = pages\ndef __str__(self):\nreturn f\"{self.title} ({self.pages} pages)\"\ndef __len__(self):\nreturn self.pages\nbook = Book(\"Python Basics\", 250)\nprint(book)\nprint(len(book))"
+  },
+  {
+    "chunk_id": 11,
+    "page_number": 5,
+    "section_title": "Composition",
+    "content": "Section: Composition\nComposition builds a class using objects of other classes. It represents a has-a relationship and is often more\nflexible than inheritance when one object simply uses another.\nA Car has an Engine.\nCar delegates engine behavior to its Engine object.\nComposition helps keep responsibilities separate.\nclass Engine:\ndef start(self):\nprint(\"Engine started\")\nclass Car:\ndef __init__(self):\nself.engine = Engine()\ndef start(self):\nself.engine.start()\ncar = Car()\ncar.start()"
+  },
+  {
+    "chunk_id": 12,
+    "page_number": 6,
+    "section_title": "Interview Revision",
+    "content": "Section: Interview Revision\nUse these short comparisons for revision. Explain each concept with a definition and a small example rather than\nmemorizing isolated phrases.\nBe ready to define a class, instantiate an object, and explain self.\nTrace __init__ and method calls in a short program.\nExplain inheritance, overriding, polymorphism, and super().\nDistinguish class variables from instance variables.\nChoose composition when one class uses another object rather than specializing it."
+  },
+  {
+    "chunk_id": 13,
+    "page_number": 6,
+    "section_title": "Class vs object",
+    "content": "Section: Class vs object\nA class defines structure and behavior; an object is a concrete instance of that class.\n__init__ vs self\n__init__ initializes instance state; self refers to the current instance inside an instance method."
+  },
+  {
+    "chunk_id": 14,
+    "page_number": 6,
+    "section_title": "Inheritance vs composition",
+    "content": "Section: Inheritance vs composition\nInheritance models an is-a relationship; composition models a has-a relationship."
+  },
+  {
+    "chunk_id": 15,
+    "page_number": 6,
+    "section_title": "Overriding vs overloading",
+    "content": "Section: Overriding vs overloading\nOverriding replaces inherited behavior in a subclass. Python does not support traditional signature-based method\noverloading in the same way as Java; common alternatives include default arguments and *args."
+  },
+  {
+    "chunk_id": 16,
+    "page_number": 6,
+    "section_title": "Encapsulation vs abstraction",
+    "content": "Section: Encapsulation vs abstraction\nEncapsulation organizes state and controls access. Abstraction presents a simpler interface while hiding\nimplementation details."
+  },
+  {
+    "chunk_id": 17,
+    "page_number": 6,
+    "section_title": "Quick Practice Questions",
+    "content": "Section: Quick Practice Questions\n1. What is the difference between a class and an object?\n2. Why is self included in an instance method definition?\n3. When does __init__ execute?\n4. How does inheritance reduce code duplication?\n5. What is method overriding?\n6. How does encapsulation help protect object state?\n7. What is the difference between a class variable and an instance variable?\n8. Give an example of polymorphism in Python.\n9. What problem do abstract base classes solve?\n10. When is composition preferable to inheritance?"
+  }
+]

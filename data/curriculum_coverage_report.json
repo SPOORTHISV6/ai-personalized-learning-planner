@@ -1,0 +1,321 @@
+{
+    "evaluation_type": "Heading and evidence-based body-text coverage",
+    "overall": {
+        "concepts_expected": 32,
+        "confirmed": 32,
+        "needs_review": 0,
+        "missing": 0,
+        "confirmed_coverage_percent": 100.0,
+        "potential_coverage_percent": 100.0
+    },
+    "topics": [
+        {
+            "topic": "normalization",
+            "subject": "DBMS",
+            "resources_retrieved": 9,
+            "concepts_expected": 9,
+            "confirmed": 9,
+            "needs_review": 0,
+            "missing": 0,
+            "confirmed_coverage_percent": 100.0,
+            "potential_coverage_percent": 100.0,
+            "concept_results": [
+                {
+                    "concept": "FIRST NORMAL FORM",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "first normal form",
+                    "matched_section": "First Normal Form (1NF)",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "SECOND NORMAL FORM",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "second normal form",
+                    "matched_section": "Second Normal Form (2NF)",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "THIRD NORMAL FORM",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "third normal form",
+                    "matched_section": "Third Normal Form (3NF)",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "BOYCE CODD NORMAL FORM",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "boyce codd normal form",
+                    "matched_section": "Boyce-Codd Normal Form (BCNF)",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "FUNCTIONAL DEPENDENCIES",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "functional dependencies",
+                    "matched_section": "Functional Dependencies",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "NORMAL FORMS OVERVIEW",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "comparison at a glance",
+                    "matched_section": "Comparison at a Glance",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "DECOMPOSITION",
+                    "status": "BODY_CONFIRMED",
+                    "evidence_type": "body_text",
+                    "matched_alias": "decompose",
+                    "matched_section": "Second Normal Form (2NF)",
+                    "evidence_snippet": "Second Normal Form (2NF): Decompose into Student(StudentID, StudentName), Course(CourseID, CourseName), and Enrollment(StudentID, | Third Normal Form (3NF): Decompose: | Boyce-Codd Normal Form (BCNF): Decomposing to BCNF can sometimes sacrifice dependency preservation, so design decisions may"
+                },
+                {
+                    "concept": "ANOMALIES",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "anomalies",
+                    "matched_section": "Anomalies in Poorly Designed Tables",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "KEYS",
+                    "status": "BODY_CONFIRMED",
+                    "evidence_type": "body_text",
+                    "matched_alias": "composite key",
+                    "matched_section": "Second Normal Form (2NF)",
+                    "evidence_snippet": "Second Normal Form (2NF): In the common classroom case, this means removing partial dependencies on part of a composite key. | Third Normal Form (3NF): (part of at least one candidate key). | Third Normal Form (3NF): A relation is in 3NF if, for every non-trivial functional dependency X → A, either X is a superkey or A is a prime attribute"
+                }
+            ]
+        },
+        {
+            "topic": "sql_joins",
+            "subject": "DBMS",
+            "resources_retrieved": 7,
+            "concepts_expected": 7,
+            "confirmed": 7,
+            "needs_review": 0,
+            "missing": 0,
+            "confirmed_coverage_percent": 100.0,
+            "potential_coverage_percent": 100.0,
+            "concept_results": [
+                {
+                    "concept": "INNER JOIN",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "inner join",
+                    "matched_section": "INNER JOIN",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "LEFT JOIN",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "left join",
+                    "matched_section": "LEFT JOIN",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "RIGHT JOIN",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "right join",
+                    "matched_section": "RIGHT JOIN",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "FULL OUTER JOIN",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "full outer join",
+                    "matched_section": "FULL OUTER JOIN",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "CROSS JOIN",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "cross join",
+                    "matched_section": "CROSS JOIN",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "SELF JOIN",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "self join",
+                    "matched_section": "Self join",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "JOIN CONDITIONS",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "join conditions",
+                    "matched_section": "Join Conditions and NULL",
+                    "evidence_snippet": null
+                }
+            ]
+        },
+        {
+            "topic": "python oop",
+            "subject": "Python",
+            "resources_retrieved": 9,
+            "concepts_expected": 9,
+            "confirmed": 9,
+            "needs_review": 0,
+            "missing": 0,
+            "confirmed_coverage_percent": 100.0,
+            "potential_coverage_percent": 100.0,
+            "concept_results": [
+                {
+                    "concept": "CLASSES AND OBJECTS",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "classes and objects",
+                    "matched_section": "Classes and Objects",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "CONSTRUCTOR AND SELF",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "constructor and self",
+                    "matched_section": "Constructor and self",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "ENCAPSULATION",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "encapsulation",
+                    "matched_section": "Encapsulation",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "INHERITANCE",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "inheritance",
+                    "matched_section": "Inheritance",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "POLYMORPHISM",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "polymorphism",
+                    "matched_section": "Polymorphism",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "ABSTRACTION",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "abstraction",
+                    "matched_section": "Abstraction",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "CLASS VS INSTANCE VARIABLES",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "class vs instance variables",
+                    "matched_section": "Class vs Instance Variables",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "SPECIAL METHODS",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "special methods",
+                    "matched_section": "Special Methods",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "COMPOSITION",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "composition",
+                    "matched_section": "Composition",
+                    "evidence_snippet": null
+                }
+            ]
+        },
+        {
+            "topic": "sql basics",
+            "subject": "DBMS",
+            "resources_retrieved": 5,
+            "concepts_expected": 7,
+            "confirmed": 7,
+            "needs_review": 0,
+            "missing": 0,
+            "confirmed_coverage_percent": 100.0,
+            "potential_coverage_percent": 100.0,
+            "concept_results": [
+                {
+                    "concept": "SELECT",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "select",
+                    "matched_section": "SELECT and FROM",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "WHERE",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "where",
+                    "matched_section": "WHERE and Operators",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "AGGREGATE FUNCTIONS",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "aggregate functions",
+                    "matched_section": "Aggregate Functions",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "GROUP BY",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "group by",
+                    "matched_section": "GROUP BY and HAVING",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "HAVING",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "having",
+                    "matched_section": "GROUP BY and HAVING",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "ORDER BY",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "order by",
+                    "matched_section": "ORDER BY and LIMIT",
+                    "evidence_snippet": null
+                },
+                {
+                    "concept": "LIMIT",
+                    "status": "CONFIRMED",
+                    "evidence_type": "heading",
+                    "matched_alias": "limit",
+                    "matched_section": "ORDER BY and LIMIT",
+                    "evidence_snippet": null
+                }
+            ]
+        }
+    ]
+}

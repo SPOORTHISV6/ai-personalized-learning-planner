@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+streamlit
+sqlalchemy
+psycopg2-binary
+python-dotenv
+pydantic
+pandas
+numpy
+pwdlib[argon2]
+PyJWT

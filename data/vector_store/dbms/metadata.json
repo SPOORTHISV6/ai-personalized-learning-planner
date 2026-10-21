@@ -1,0 +1,80 @@
+[
+    {
+        "chunk_id": 0,
+        "page_number": 1,
+        "section_title": "General",
+        "text": "Section: General\nDatabase Management Systems (DBMS) Study Notes for AI Personalized Learning & Study Planner RAG Testing"
+    },
+    {
+        "chunk_id": 1,
+        "page_number": 1,
+        "section_title": "1. Introduction to DBMS",
+        "text": "Section: 1. Introduction to DBMS\nA Database Management System (DBMS) is software used to create, store, organize, retrieve, and manage data in a database. It provides an interface between users or applications and the stored data. Main functions of a DBMS: • Data storage and retrieval • Data organization and efficient querying • Data security and access control • Transaction management • Backup and recovery • Concurrency control • Maintaining data consistency and integrity"
+    },
+    {
+        "chunk_id": 2,
+        "page_number": 1,
+        "section_title": "2. DBMS vs File System",
+        "text": "Section: 2. DBMS vs File System\nFeature File System DBMS Data redundancy Usually higher Can be controlled Data consistency Harder to maintain Integrity constraints help Security Basic or application-dependent Built-in access control Concurrent access Limited Concurrency control supported Backup and recovery Often manual Systematic mechanisms available Querying Requires application logic SQL and query processing"
+    },
+    {
+        "chunk_id": 3,
+        "page_number": 1,
+        "section_title": "3. Relational Database Model",
+        "text": "Section: 3. Relational Database Model\nThe relational model represents data using relations, commonly implemented as tables. A table contains rows and columns. A row represents a record, while a column represents an attribute. • Relation: A table containing related records. • Tuple: A row in a relation. • Attribute: A column describing a property of the data. • Domain: The set of valid values for an attribute."
+    },
+    {
+        "chunk_id": 4,
+        "page_number": 1,
+        "section_title": "4. Keys",
+        "text": "Section: 4. Keys\n• Primary Key: Uniquely identifies each row. It cannot contain NULL values. • Candidate Key: A minimal set of attributes that can uniquely identify a row. • Super Key: A set of attributes that uniquely identifies a row, possibly with extra attributes. • Foreign Key: An attribute that references a key in another table and helps maintain referential integrity. • Composite Key: A key consisting of more than one attribute."
+    },
+    {
+        "chunk_id": 5,
+        "page_number": 2,
+        "section_title": "5. SQL Basics",
+        "text": "Section: 5. SQL Basics\nSQL (Structured Query Language) is used to define, manipulate, query, and control data in relational databases. • DDL: CREATE, ALTER, DROP, TRUNCATE • DML: INSERT, UPDATE, DELETE • DQL: SELECT • DCL: GRANT, REVOKE • TCL: COMMIT, ROLLBACK, SAVEPOINT"
+    },
+    {
+        "chunk_id": 6,
+        "page_number": 2,
+        "section_title": "6. SQL Joins",
+        "text": "Section: 6. SQL Joins\nA JOIN combines rows from two or more tables using a related column or join condition. • INNER JOIN: Returns rows with matching values in both tables. • LEFT JOIN: Returns all rows from the left table and matching rows from the right table. • RIGHT JOIN: Returns all rows from the right table and matching rows from the left table. • FULL OUTER JOIN: Returns matching rows and unmatched rows from both sides where supported. • CROSS JOIN: Produces the Cartesian product of two tables."
+    },
+    {
+        "chunk_id": 7,
+        "page_number": 2,
+        "section_title": "7. Normalization",
+        "text": "Section: 7. Normalization\nNormalization is a database design technique used to organize data into tables in order to reduce unnecessary redundancy and improve data integrity. First Normal Form (1NF) A relation is in 1NF when attributes contain atomic values and repeating groups are eliminated. Each field should contain a single value rather than a list of values. Second Normal Form (2NF) A relation is in 2NF when it is in 1NF and every non-key attribute is fully functionally dependent on the entire candidate key. This is particularly important when a table has a composite key. Third Normal Form (3NF) A relation is in 3NF when it is in 2NF and non-key attributes do not have inappropriate transitive dependencies on a key. The goal is to avoid storing facts that depend on another non-key attribute."
+    },
+    {
+        "chunk_id": 8,
+        "page_number": 2,
+        "section_title": "8. Functional Dependency",
+        "text": "Section: 8. Functional Dependency\nA functional dependency describes a relationship between attributes. If attribute X determines attribute Y, it can be written as X → Y. This means that for a given value of X, the corresponding value of Y is uniquely determined. Example: In a student table, Student_ID → Student_Name means a particular Student_ID determines the student's name."
+    },
+    {
+        "chunk_id": 9,
+        "page_number": 3,
+        "section_title": "9. Transactions and ACID Properties",
+        "text": "Section: 9. Transactions and ACID Properties\nA transaction is a logical unit of database operations. A transaction should preserve database correctness even when failures or concurrent operations occur. • Atomicity: A transaction is treated as an all-or-nothing operation. • Consistency: A transaction should preserve defined database constraints. • Isolation: Concurrent transactions should not improperly interfere with each other. • Durability: Committed changes should survive failures."
+    },
+    {
+        "chunk_id": 10,
+        "page_number": 3,
+        "section_title": "10. Indexing",
+        "text": "Section: 10. Indexing\nAn index is a data structure that can speed up data retrieval for suitable queries. Indexes can improve read performance but also require storage and can add overhead to insert, update, and delete operations."
+    },
+    {
+        "chunk_id": 11,
+        "page_number": 3,
+        "section_title": "11. Common SQL Examples",
+        "text": "Section: 11. Common SQL Examples\nSelect all students SELECT * FROM students; Filter rows SELECT * FROM students WHERE score >= 75; Sort results SELECT * FROM students ORDER BY score DESC; Group data SELECT subject, AVG(score) FROM performance GROUP BY subject; Join tables SELECT s.name, p.score FROM students s JOIN performance p ON s.student_id = p.student_id;"
+    },
+    {
+        "chunk_id": 12,
+        "page_number": 3,
+        "section_title": "12. Quick Revision Questions",
+        "text": "Section: 12. Quick Revision Questions\n1. What is a DBMS and why is it used? 2. What is the difference between a primary key and a foreign key? 3. What is normalization? 4. What conditions should a relation satisfy for 1NF? 5. What is the difference between 2NF and 3NF? 6. What is a functional dependency? 7. What is an INNER JOIN? 8. What is the difference between WHERE and GROUP BY? 9. What are the four ACID properties? 10. Why can indexes improve query performance?"
+    }
+]

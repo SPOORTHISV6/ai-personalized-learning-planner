@@ -1,0 +1,158 @@
+PDF: normalization.pdf
+Extracted characters: 21942
+Potentially suspicious lines: 77
+
+Page 1, line 32: NormalizationandDatabaseDesign
+  Possible issues: Possible fragmented text
+Page 1, line 40: 10.1 INTRODUCTION
+  Possible issues: Possible fragmented text
+Page 1, line 48: 
+  Possible issues: Non-ASCII characters
+Page 1, line 49: 
+  Possible issues: Non-ASCII characters
+Page 1, line 50: 
+  Possible issues: Non-ASCII characters
+Page 1, line 54: 10.3 TERMINOLOGIES
+  Possible issues: Possible fragmented text
+Page 2, line 26: normalizationare to:
+  Possible issues: Possible fragmented text
+Page 2, line 27: 
+  Possible issues: Non-ASCII characters
+Page 2, line 28: 
+  Possible issues: Non-ASCII characters
+Page 2, line 39: 
+  Possible issues: Non-ASCII characters
+Page 2, line 46: 
+  Possible issues: Non-ASCII characters
+Page 2, line 47: 10.5 NORMALFORMS
+  Possible issues: Possible fragmented text
+Page 2, line 52: 
+  Possible issues: Non-ASCII characters
+Page 2, line 53: 
+  Possible issues: Non-ASCII characters
+Page 2, line 55: Second normalform(2NF)
+  Possible issues: Possible fragmented text
+Page 3, line 2: 
+  Possible issues: Non-ASCII characters
+Page 3, line 3: 
+  Possible issues: Non-ASCII characters
+Page 3, line 4: Third normalform(3NF)
+  Possible issues: Possible fragmented text
+Page 3, line 19: 
+  Possible issues: Non-ASCII characters
+Page 3, line 31: 
+  Possible issues: Non-ASCII characters
+Page 3, line 32: 
+  Possible issues: Non-ASCII characters
+Page 3, line 33: 
+  Possible issues: Non-ASCII characters
+Page 3, line 34: 
+  Possible issues: Non-ASCII characters
+Page 3, line 35: 
+  Possible issues: Non-ASCII characters
+Page 3, line 37: 
+  Possible issues: Non-ASCII characters
+Page 3, line 38: 
+  Possible issues: Non-ASCII characters
+Page 3, line 45: InstructorLocation, Grade)
+  Possible issues: Possible fragmented text
+Page 3, line 46: 
+  Possible issues: Non-ASCII characters
+Page 3, line 47: 
+  Possible issues: Non-ASCII characters
+Page 3, line 48: 
+  Possible issues: Non-ASCII characters
+Page 4, line 9: or augmentation).
+  Possible issues: Possible fragmented text
+Page 4, line 12: 
+  Possible issues: Non-ASCII characters
+Page 4, line 13: 
+  Possible issues: Non-ASCII characters
+Page 4, line 20: 
+  Possible issues: Non-ASCII characters
+Page 4, line 21: 
+  Possible issues: Non-ASCII characters
+Page 4, line 23: 
+  Possible issues: Non-ASCII characters
+Page 4, line 24: 
+  Possible issues: Non-ASCII characters
+Page 4, line 25: 
+  Possible issues: Non-ASCII characters
+Page 4, line 28: CourseInstructor(CourseNo,CourseName,InstructorNo, InstructorName,
+  Possible issues: Possible fragmented text
+Page 4, line 29: InstructorLocation)
+  Possible issues: Possible fragmented text
+Page 4, line 31: 
+  Possible issues: Non-ASCII characters
+Page 4, line 32: 
+  Possible issues: Non-ASCII characters
+Page 4, line 36: 
+  Possible issues: Non-ASCII characters
+Page 4, line 44: Q2: Considerthefollowingrelation:
+  Possible issues: Possible fragmented text
+Page 5, line 18: Thefollowingarethestagesinvolvedinnormalizingdatato 3NF:-
+  Possible issues: Possible fragmented text
+Page 5, line 19: 
+  Possible issues: Non-ASCII characters
+Page 5, line 25: 
+  Possible issues: Non-ASCII characters
+Page 5, line 26: 
+  Possible issues: Non-ASCII characters
+Page 5, line 31: 
+  Possible issues: Non-ASCII characters
+Page 5, line 32: 
+  Possible issues: Non-ASCII characters
+Page 5, line 33: 
+  Possible issues: Non-ASCII characters
+Page 5, line 34: 
+  Possible issues: Non-ASCII characters
+Page 5, line 42: 
+  Possible issues: Non-ASCII characters
+Page 5, line 43: 
+  Possible issues: Non-ASCII characters
+Page 7, line 13: Student_id, Major Advisor
+  Possible issues: Non-ASCII characters
+Page 7, line 15: Advisor Major
+  Possible issues: Non-ASCII characters
+Page 7, line 28: St_Adv(Student_id,Advisor)
+  Possible issues: Possible fragmented text
+Page 7, line 43: Adv_Maj(Advisor, Major)
+  Possible issues: Possible fragmented text
+Page 7, line 44: Table 10.3:Adv_Maj
+  Possible issues: Possible fragmented text
+Page 8, line 3: Table10.4: Client_Interview
+  Possible issues: Possible fragmented text
+Page 8, line 5: FD1 - ClientNo, InterviewDate InterviewTime, StaffNo, RoomNo (PK)
+  Possible issues: Non-ASCII characters
+Page 8, line 7: FD2 - staffNo, interviewDate, interviewTime clientNO (candidate key: CK)
+  Possible issues: Non-ASCII characters
+Page 8, line 8: iii. FD3 - roomNo, interviewDate, interviewTime staffNo, clientNo (CK)
+  Possible issues: Non-ASCII characters
+Page 8, line 9: iv. FD4 - staffNo, interviewDate roomNo
+  Possible issues: Non-ASCII characters
+Page 8, line 14: Table10.6:StaffRoom
+  Possible issues: Possible fragmented text
+Page 9, line 16: 10.7 VIDEOLECTURE
+  Possible issues: Possible fragmented text
+Page 9, line 17: https://tinyurl.com/jc6dbyp
+  Possible issues: Possible fragmented text
+Page 9, line 18: https://tinyurl.com/gu49pgj
+  Possible issues: Possible fragmented text
+Page 11, line 12: student-id, course-code taught by, teacher-qualification taught byteacher-
+  Possible issues: Non-ASCII characters
+Page 11, line 17: (taught-by, teacher-qualification)
+  Possible issues: Possible fragmented text
+Page 11, line 22: 
+  Possible issues: Non-ASCII characters
+Page 13, line 24: wikieducator.org/CCNC/CCNC_Module_5/The_database_application/
+  Possible issues: Possible fragmented text
+Page 13, line 25: Database_Concepts/Normalization
+  Possible issues: Possible fragmented text
+Page 13, line 28: 264j-database-internet-and-systems-integration-technologies-fall-2013/lecture-
+  Possible issues: Possible fragmented text
+Page 13, line 29: notes-exercises/MIT1_264JF13_lect_10.pdf
+  Possible issues: Possible fragmented text
+Page 13, line 31: Hongkong, http://www.opentextbooks.org.hk/ditatopic/31119
+  Possible issues: Possible fragmented text
+Page 13, line 34: 10.12 ATTRIBUTION
+  Possible issues: Possible fragmented text

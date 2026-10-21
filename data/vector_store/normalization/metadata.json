@@ -1,0 +1,62 @@
+[
+  {
+    "chunk_id": 0,
+    "page_number": 2,
+    "section_title": "What is Database Normalization",
+    "content": "Database Normalization. Section: What is Database Normalization\nDatabase normalization is the process of organizing relational tables to reduce avoidable duplication and prevent\ninsertion, update, and deletion anomalies. It uses keys and functional dependencies to decide how attributes should be\ngrouped.\nWhy normalize?\nStore each fact in an appropriate place.\nReduce inconsistent copies of the same fact.\nMake updates safer and data relationships clearer.\nNormalization improves design, but joins may be needed to reconstruct information."
+  },
+  {
+    "chunk_id": 1,
+    "page_number": 2,
+    "section_title": "Functional Dependencies",
+    "content": "Database Normalization. Section: Functional Dependencies\nA functional dependency X → Y means that each value of attribute set X determines exactly one value of attribute set\nY. X is the determinant. A candidate key is a minimal set of attributes that functionally determines every attribute in a\nrelation.\nExample\nCourseID → CourseName\nA partial dependency occurs when a non-key attribute depends on only part of a composite candidate key. A transitive\ndependency occurs when a key determines a non-key attribute that in turn determines another non-key attribute."
+  },
+  {
+    "chunk_id": 2,
+    "page_number": 2,
+    "section_title": "Anomalies in Poorly Designed Tables",
+    "content": "Database Normalization. Section: Anomalies in Poorly Designed Tables\nInsertion anomaly\nA fact cannot be stored without inserting an unrelated fact. Example: a new course cannot be recorded until a student\nenrolls.\nUpdate anomaly\nThe same fact appears in multiple rows and must be changed everywhere. Missing one row creates inconsistent data.\nDeletion anomaly\nDeleting one row accidentally removes another fact. Deleting the last enrolment might also erase the only record of a\ncourse."
+  },
+  {
+    "chunk_id": 3,
+    "page_number": 2,
+    "section_title": "First Normal Form (1NF)",
+    "content": "Database Normalization. Section: First Normal Form (1NF)\nA relation is in First Normal Form when each cell contains a single atomic value for the chosen data model, and there\nare no repeating groups or multi-valued columns.\nBefore and after\nNot 1NF:\nStudentID | Name | PhoneNumbers\n1 | Asha | 9876, 9123\n1NF design:\nStudentID | Name | Phone\n1 | Asha | 9876\n1 | Asha | 9123\nDo not treat 'atomic' as a universal property of a value. It depends on how the application needs to query and manage\nthe data."
+  },
+  {
+    "chunk_id": 4,
+    "page_number": 3,
+    "section_title": "Second Normal Form (2NF)",
+    "content": "Database Normalization. Section: Second Normal Form (2NF)\nA relation is in 2NF when it is in 1NF and every non-prime attribute is fully functionally dependent on every candidate\nkey. In the common classroom case, this means removing partial dependencies on part of a composite key.\nEnrollment(StudentID, CourseID, StudentName, CourseName, Grade)\nKey: (StudentID, CourseID)\nCourseID → CourseName\nDecompose into Student(StudentID, StudentName), Course(CourseID, CourseName), and Enrollment(StudentID,\nCourseID, Grade)."
+  },
+  {
+    "chunk_id": 5,
+    "page_number": 3,
+    "section_title": "Third Normal Form (3NF)",
+    "content": "Database Normalization. Section: Third Normal Form (3NF)\nA relation is in 3NF if, for every non-trivial functional dependency X → A, either X is a superkey or A is a prime attribute\n(part of at least one candidate key). A useful introductory rule is to remove transitive dependencies of non-key attributes\non a key.\nStudent(StudentID, StudentName, DeptID, DeptName)\nStudentID → DeptID\nDeptID → DeptName\nDecompose:\nStudent(StudentID, StudentName, DeptID)\nDepartment(DeptID, DeptName)\nThe formal definition is more precise than the shortcut 'no transitive dependency', especially when multiple candidate\nkeys exist."
+  },
+  {
+    "chunk_id": 6,
+    "page_number": 3,
+    "section_title": "Boyce-Codd Normal Form (BCNF)",
+    "content": "Database Normalization. Section: Boyce-Codd Normal Form (BCNF)\nA relation is in BCNF if every determinant of every non-trivial functional dependency is a superkey. BCNF is stricter than\n3NF.\nA 3NF relation can fail BCNF when a dependency has a determinant that is not a superkey, even though the dependent\nattribute is prime. Decomposing to BCNF can sometimes sacrifice dependency preservation, so design decisions may\ninvolve trade-offs."
+  },
+  {
+    "chunk_id": 7,
+    "page_number": 3,
+    "section_title": "Comparison at a Glance",
+    "content": "Database Normalization. Section: Comparison at a Glance\nForm\nMain requirement\nCommon issue addressed\n1NF\nAtomic values; no repeating groups\nMulti-valued cells\n2NF\n1NF + no partial dependency of non-prime\nattributes\nComposite-key partial dependency\n3NF\nFor each X → A, X is superkey or A is\nprime\nCertain transitive dependencies\nBCNF\nEvery determinant is a superkey\nDeterminants that are not keys"
+  },
+  {
+    "chunk_id": 8,
+    "page_number": 3,
+    "section_title": "Worked Normalization Example",
+    "content": "Database Normalization. Section: Worked Normalization Example\nConsider the relation below. Assume StudentID identifies a student, CourseID identifies a course, and the pair identifies\nan enrolment.\nEnrollment(StudentID, StudentName, CourseID, CourseName, Instructor, Grade)\nKey: (StudentID, CourseID)\nCourseID → CourseName, Instructor\nA normalized decomposition is Student(StudentID, StudentName), Course(CourseID, CourseName, Instructor), and\nEnrollment(StudentID, CourseID, Grade). Check the assumptions: if instructors vary by course offering or semester, the\nkey and dependencies must change.\nValidation checklist\nIdentify all candidate keys.\nList functional dependencies from the business rules.\nCheck atomic values and repeating groups.\nRemove partial dependencies for 2NF.\nCheck 3NF and BCNF using the formal definitions.\nVerify lossless joins and consider dependency preservation."
+  },
+  {
+    "chunk_id": 9,
+    "page_number": 4,
+    "section_title": "Common Mistakes",
+    "content": "Database Normalization. Section: Common Mistakes\nAssuming every table with a primary key is automatically normalized.\nConfusing a superkey with a candidate key: a candidate key is minimal.\nApplying 2NF reasoning without checking whether the key is composite.\nTreating 3NF and BCNF as identical.\nDecomposing tables without checking whether joins lose information.\nInventing functional dependencies without business-rule evidence.\n11. Quick Revision and Practice\nQuick revision\n1NF: atomic values and no repeating groups.\n2NF: 1NF plus no partial dependency of non-prime attributes on a candidate key.\n3NF: every non-trivial X → A has X as a superkey or A as a prime attribute.\nBCNF: every determinant of a non-trivial dependency is a superkey.\nPractice questions\nA table stores three phone numbers in one column. Which normal form is violated, and why?\nFor key (StudentID, CourseID), StudentID → StudentName. What dependency problem appears?\nGiven EmployeeID → DeptID and DeptID → DeptName, explain the likely 3NF decomposition.\nState the formal difference between 3NF and BCNF.\nWhy must a decomposition be checked for lossless join?"
+  }
+]

@@ -1,0 +1,80 @@
+[
+  {
+    "chunk_id": 0,
+    "page_number": 1,
+    "section_title": "General",
+    "content": "SQL Basics. Section: General\nCorrected Study Guide for RAG Retrieval\nContents\nPurpose: a structured study guide designed for topic-wise learning and retrieval practice."
+  },
+  {
+    "chunk_id": 1,
+    "page_number": 2,
+    "section_title": "Relational Database and Tables",
+    "content": "SQL Basics. Section: Relational Database and Tables\nA relational database stores data in tables. A row represents a record and a column represents an attribute. A primary\nkey uniquely identifies each row; a foreign key references a key in another table.\nCREATE DATABASE practice_db;\nUSE practice_db;\nCREATE TABLE Departments (\ndept_id INT PRIMARY KEY,\ndept_name VARCHAR(50) NOT NULL\n);\nCREATE TABLE Employees (\nemp_id INT PRIMARY KEY,\nemp_name VARCHAR(80) NOT NULL,\ndept_id INT,\nsalary DECIMAL(10,2),\nhire_date DATE,\nFOREIGN KEY (dept_id) REFERENCES Departments(dept_id)\n);"
+  },
+  {
+    "chunk_id": 2,
+    "page_number": 2,
+    "section_title": "SELECT and FROM",
+    "content": "SQL Basics. Section: SELECT and FROM\nSELECT chooses the columns or expressions to return. FROM identifies the source table. Use explicit column names in\napplication queries rather than SELECT * when a stable output schema matters.\nSELECT emp_id, emp_name, salary\nUse DISTINCT to remove duplicate result rows, not as a substitute for understanding why duplicates exist."
+  },
+  {
+    "chunk_id": 3,
+    "page_number": 2,
+    "section_title": "WHERE and Operators",
+    "content": "SQL Basics. Section: WHERE and Operators\nSELECT emp_name, salary\nWHERE salary >= 50000\nAND dept_id IN (10, 20);\nCommon operators include =, <>, <, <=, >, >=, BETWEEN, IN, LIKE, AND, OR, and NOT. BETWEEN is inclusive at\nboth ends in standard SQL behavior. Use parentheses when mixing AND and OR."
+  },
+  {
+    "chunk_id": 4,
+    "page_number": 2,
+    "section_title": "NULL and Three-Valued Logic",
+    "content": "SQL Basics. Section: NULL and Three-Valued Logic\nNULL represents missing, unknown, or inapplicable data. Comparisons such as salary = NULL do not work as\nintended. Use IS NULL or IS NOT NULL.\nSELECT emp_name\nWHERE dept_id IS NULL;\nA condition involving NULL may evaluate to UNKNOWN rather than TRUE or FALSE. WHERE keeps only rows whose\ncondition is TRUE."
+  },
+  {
+    "chunk_id": 5,
+    "page_number": 2,
+    "section_title": "ORDER BY and LIMIT",
+    "content": "SQL Basics. Section: ORDER BY and LIMIT\nORDER BY sorts the result. ASC is ascending and DESC is descending. LIMIT restricts the number of returned rows in\nMySQL.\nSELECT emp_name, salary\nORDER BY salary DESC, emp_name ASC\nLIMIT 5;\nAlways use a deterministic tie-breaker when the exact order matters. LIMIT without ORDER BY does not guarantee\nwhich rows are selected."
+  },
+  {
+    "chunk_id": 6,
+    "page_number": 3,
+    "section_title": "Aggregate Functions",
+    "content": "SQL Basics. Section: Aggregate Functions\nAggregate functions summarize multiple rows. Common functions are COUNT, SUM, AVG, MIN, and MAX. Most\naggregates ignore NULL values; COUNT(*) counts rows, while COUNT(column) counts non-NULL values in that\ncolumn.\nSELECT COUNT(*) AS employee_count,\nAVG(salary) AS average_salary,\nMIN(salary) AS lowest_salary,\nMAX(salary) AS highest_salary"
+  },
+  {
+    "chunk_id": 7,
+    "page_number": 3,
+    "section_title": "GROUP BY and HAVING",
+    "content": "SQL Basics. Section: GROUP BY and HAVING\nGROUP BY creates groups for aggregation. HAVING filters groups after aggregate values are computed; WHERE\nfilters individual rows before grouping.\nSELECT dept_id, COUNT(*) AS employee_count,\nAVG(salary) AS average_salary\nWHERE salary IS NOT NULL\nGROUP BY dept_id\nHAVING COUNT(*) >= 2\nORDER BY average_salary DESC;\nIn portable SQL, every selected non-aggregated expression should be validly represented in the GROUP BY or be\nfunctionally dependent on grouped keys under the database's rules."
+  },
+  {
+    "chunk_id": 8,
+    "page_number": 3,
+    "section_title": "CASE Expressions",
+    "content": "SQL Basics. Section: CASE Expressions\nCASE creates conditional values inside a query. It is useful for labels, buckets, and conditional aggregation.\nSELECT emp_name, salary,\nCASE\nWHEN salary >= 80000 THEN 'High'\nWHEN salary >= 50000 THEN 'Medium'\nWHEN salary IS NOT NULL THEN 'Low'\nELSE 'Unknown'\nEND AS salary_band"
+  },
+  {
+    "chunk_id": 9,
+    "page_number": 3,
+    "section_title": "INSERT, UPDATE, and DELETE",
+    "content": "SQL Basics. Section: INSERT, UPDATE, and DELETE\nINSERT INTO Departments (dept_id, dept_name)\nVALUES (10, 'Engineering');\nUPDATE Employees\nSET salary = salary * 1.05\nWHERE dept_id = 10;\nDELETE FROM Employees\nWHERE emp_id = 101;\nAlways inspect the WHERE clause before UPDATE or DELETE. Without it, every row may be changed or removed.\nUse transactions when a multi-step operation must succeed or fail as a unit."
+  },
+  {
+    "chunk_id": 10,
+    "page_number": 3,
+    "section_title": "Constraints and Keys",
+    "content": "SQL Basics. Section: Constraints and Keys\nPRIMARY KEY: unique and not NULL row identifier.\nFOREIGN KEY: enforces a reference to a valid key, subject to the database's constraint rules.\nNOT NULL: rejects missing values.\nUNIQUE: prevents duplicate values or combinations, subject to NULL semantics in the DBMS.\nCHECK: restricts values using a Boolean condition where supported.\nDEFAULT: supplies a value when an insert omits the column."
+  },
+  {
+    "chunk_id": 11,
+    "page_number": 4,
+    "section_title": "Query order concept",
+    "content": "SQL Basics. Section: Query order concept\nA useful logical processing model is FROM/JOIN, WHERE, GROUP BY, HAVING, SELECT, DISTINCT, ORDER BY,\nthen LIMIT. This is a conceptual model, not a promise about physical execution order."
+  },
+  {
+    "chunk_id": 12,
+    "page_number": 4,
+    "section_title": "Practice questions",
+    "content": "SQL Basics. Section: Practice questions\nFind employees earning at least 50,000, highest salary first.\nCount employees in each department and show only departments with at least five employees.\nFind employees with no department assigned.\nReturn the three highest salaries with employee names.\nExplain COUNT(*) versus COUNT(salary).\nClassify salaries into High, Medium, and Low using CASE.\nWhy is WHERE COUNT(*) >= 2 invalid in a typical grouped query, and where should the condition go?"
+  }
+]

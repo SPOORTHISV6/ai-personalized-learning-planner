@@ -1,0 +1,80 @@
+[
+  {
+    "chunk_id": 0,
+    "page_number": 1,
+    "section_title": "General",
+    "content": "Section: General\nCorrected Study Guide for RAG Retrieval\nContents\nPurpose: a structured study guide designed for topic-wise learning and retrieval practice."
+  },
+  {
+    "chunk_id": 1,
+    "page_number": 2,
+    "section_title": "Introduction to SQL Joins",
+    "content": "Section: Introduction to SQL Joins\nA SQL join combines rows from two tables using a related column or a join condition. Joins let you query normalized\ndata without storing the same fact repeatedly.\nSELECT s.student_id, s.name, e.course_id\nJOIN Enrollments AS e\nUse explicit JOIN ... ON syntax. It makes the relationship visible and avoids the accidental Cartesian products that old\ncomma-join syntax can produce."
+  },
+  {
+    "chunk_id": 2,
+    "page_number": 2,
+    "section_title": "Sample Tables",
+    "content": "Section: Sample Tables\nStudents\nstudent_id | name\n1 | Asha\n2 | Ravi\n3 | Meera\nEnrollments\nstudent_id | course\n1 | SQL\n2 | Python\n4 | Java\nThe sample deliberately includes student 3 without an enrollment and enrollment 4 without a matching student. Those\nunmatched rows make outer-join behavior easier to see."
+  },
+  {
+    "chunk_id": 3,
+    "page_number": 2,
+    "section_title": "INNER JOIN",
+    "content": "Section: INNER JOIN\nINNER JOIN returns only rows that satisfy the join condition in both tables.\nINNER JOIN Enrollments AS e\nExpected matches: Asha with SQL and Ravi with Python. Meera and the enrollment for student 4 are excluded."
+  },
+  {
+    "chunk_id": 4,
+    "page_number": 2,
+    "section_title": "LEFT JOIN",
+    "content": "Section: LEFT JOIN\nLEFT JOIN returns every row from the left table and matching rows from the right table. If there is no match, right-side\ncolumns are NULL.\nLEFT JOIN Enrollments AS e\nMeera remains in the output with NULL for course. A frequent mistake is putting a right-table filter in WHERE when\nunmatched left rows should remain; that can turn the result into inner-join-like behavior."
+  },
+  {
+    "chunk_id": 5,
+    "page_number": 2,
+    "section_title": "RIGHT JOIN",
+    "content": "Section: RIGHT JOIN\nRIGHT JOIN returns every row from the right table and matching rows from the left table. Unmatched left-side columns\nare NULL.\nRIGHT JOIN Enrollments AS e\nThe enrollment for student 4 remains, with NULL student details. Many teams prefer rewriting RIGHT JOIN as LEFT\nJOIN by swapping table order for readability."
+  },
+  {
+    "chunk_id": 6,
+    "page_number": 3,
+    "section_title": "FULL OUTER JOIN",
+    "content": "Section: FULL OUTER JOIN\nFULL OUTER JOIN returns matched rows plus unmatched rows from both sides. Unmatched columns are filled with\nNULL.\nMySQL does not support FULL OUTER JOIN as a direct keyword. A common MySQL pattern combines a LEFT JOIN\nwith a RIGHT-only set using UNION ALL.\nLEFT JOIN Enrollments AS e\nON s.student_id = e.student_id\nUNION ALL\nRIGHT JOIN Enrollments AS e\nON s.student_id = e.student_id\nWHERE s.student_id IS NULL;\nThe second branch keeps only right-side rows without a left-side match. UNION ALL avoids unnecessary duplicate\nelimination; the anti-match condition prevents matched rows from appearing twice."
+  },
+  {
+    "chunk_id": 7,
+    "page_number": 3,
+    "section_title": "CROSS JOIN",
+    "content": "Section: CROSS JOIN\nCROSS JOIN returns every combination of rows. If the left table has m rows and the right table has n rows, the result\nhas m × n rows.\nSELECT s.name, c.course_name\nCROSS JOIN Courses AS c;"
+  },
+  {
+    "chunk_id": 8,
+    "page_number": 3,
+    "section_title": "Self join",
+    "content": "Section: Self join\nA self join joins a table to itself, often to represent hierarchies such as employees and managers.\nSELECT e.name AS employee, m.name AS manager\nFROM Employees AS e\nLEFT JOIN Employees AS m\nON e.manager_id = m.employee_id;"
+  },
+  {
+    "chunk_id": 9,
+    "page_number": 3,
+    "section_title": "Join Conditions and NULL",
+    "content": "Section: Join Conditions and NULL\nUse ON to state how rows relate; use WHERE to filter the joined result.\nNULL does not equal NULL under ordinary equality comparison. Use IS NULL or IS NOT NULL.\nOne-to-many joins can multiply rows. Check the relationship cardinality before interpreting counts.\nUse qualified names such as s.student_id when multiple tables share column names.\nFor an outer join, a filter on the optional side in WHERE may remove rows with NULLs. Consider putting that filter in\nON when preserving unmatched rows is required."
+  },
+  {
+    "chunk_id": 10,
+    "page_number": 4,
+    "section_title": "Comparison at a Glance",
+    "content": "Section: Comparison at a Glance\nJoin\nRows returned\nINNER\nOnly matching rows\nLEFT\nAll left rows, plus right matches\nRIGHT\nAll right rows, plus left matches\nFULL OUTER\nAll rows from both sides, matched where possible\nCROSS\nEvery left/right combination\nSELF\nA table joined to itself; type depends on chosen join"
+  },
+  {
+    "chunk_id": 11,
+    "page_number": 4,
+    "section_title": "Common Mistakes",
+    "content": "Section: Common Mistakes\nForgetting the ON condition and creating a huge Cartesian result.\nJoining on a non-unique column and unexpectedly multiplying rows.\nUsing = NULL instead of IS NULL.\nFiltering right-side columns in WHERE and unintentionally losing LEFT JOIN unmatched rows.\nAssuming MySQL accepts FULL OUTER JOIN directly.\nUsing UNION instead of UNION ALL without considering duplicate-removal cost and semantics."
+  },
+  {
+    "chunk_id": 12,
+    "page_number": 4,
+    "section_title": "Interview Practice",
+    "content": "Section: Interview Practice\nReturn every student, including those without an enrollment. Which join is suitable?\nReturn enrollments even when the student record is missing. Which join is suitable?\nExplain the difference between ON and WHERE for an outer join.\nWrite a MySQL query that emulates FULL OUTER JOIN.\nWhat is the maximum number of rows produced by a CROSS JOIN of 7 and 4 rows?\nWhy might a join return more rows than the left table?"
+  }
+]

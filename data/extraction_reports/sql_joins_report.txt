@@ -1,0 +1,6 @@
+PDF: sql_joins.pdf
+Extracted characters: 1845
+Potentially suspicious lines: 1
+
+Page 1, line 18: database systems.
+  Possible issues: Possible fragmented text

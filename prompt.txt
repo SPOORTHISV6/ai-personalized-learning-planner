@@ -1,0 +1,205 @@
+(.venv) PS C:\Users\DELL\Desktop\projects and workshop\Agentic AI\ai-personalized-learning-planner> .venv\Scripts\python.exe -m unittest discover -s tests -v
+test_evaluation_can_stop_workflow (test_adaptive_workflow_routing.TestAdaptiveWorkflowRouting.test_evaluation_can_stop_workflow) ... ok
+test_reflection_can_complete_without_replanning (test_adaptive_workflow_routing.TestAdaptiveWorkflowRouting.test_reflection_can_complete_without_replanning) ... ok
+test_repeated_validation_failures_stop_after_two_retries (test_adaptive_workflow_routing.TestAdaptiveWorkflowRouting.test_repeated_validation_failures_stop_after_two_retries) ... [Workflow] Replanning attempt 1/2.
+[Workflow] Replanning attempt 2/2.
+[Workflow] Maximum validation retries reached. Stopping workflow.
+ok
+test_replanning_pipeline_reaches_persistence (test_adaptive_workflow_routing.TestAdaptiveWorkflowRouting.test_replanning_pipeline_reaches_persistence) ... ok
+test_validation_replan_retries_study_plan (test_adaptive_workflow_routing.TestAdaptiveWorkflowRouting.test_validation_replan_retries_study_plan) ... [Workflow] Replanning attempt 1/2.
+ok
+test_missing_quiz_result_id (test_agent_error_handling.TestEvaluationAgentErrorHandling.test_missing_quiz_result_id) ... 
+[Evaluation Agent] Evaluating quiz performance...
+[Evaluation Agent] Quiz result ID is missing.
+ok
+test_quiz_result_not_found (test_agent_error_handling.TestEvaluationAgentErrorHandling.test_quiz_result_not_found) ... 
+[Evaluation Agent] Evaluating quiz performance...
+[Evaluation Agent] Quiz result 999999 not found.
+ok
+test_shared_rules_match_topic_lookup (test_agent_performance_integration.TestStudyPlanAgentPerformance.test_shared_rules_match_topic_lookup) ... ok
+test_study_plan_selects_weak_and_moderate_topics (test_agent_performance_integration.TestStudyPlanAgentPerformance.test_study_plan_selects_weak_and_moderate_topics) ... 
+[Study Plan Agent] Generating prerequisite-aware study plan...
+[Study Plan Agent] Target session: Weak Topic | 60 min | high
+[Study Plan Agent] Learning objective: Study the fundamentals of Weak Topic.
+[Study Plan Agent] Resource sections: 
+[Study Plan Agent] Target session: Moderate Topic | 45 min | medium
+[Study Plan Agent] Learning objective: Study the fundamentals of Moderate Topic.
+[Study Plan Agent] Resource sections: 
+[Study Plan Agent] Created 2 prerequisite-aware sessions.
+ok
+test_topic_lookup_classifies_boundary_scores (test_agent_performance_integration.TestStudyPlanAgentPerformance.test_topic_lookup_classifies_boundary_scores) ... ok
+test_boundary_scores (test_evaluation_agent.TestEvaluationAgent.test_boundary_scores) ... 
+[Evaluation Agent] Evaluating quiz performance...
+[Evaluation Agent] Topic: Test Topic
+[Evaluation Agent] Score: 49.99
+[Evaluation Agent] Level: weak
+[Evaluation Agent] Existing performance record found.
+[Evaluation Agent] Performance ID: 700
+[Evaluation Agent] Evaluation completed.
+
+[Evaluation Agent] Evaluating quiz performance...
+[Evaluation Agent] Topic: Test Topic
+[Evaluation Agent] Score: 50.0
+[Evaluation Agent] Level: moderate
+[Evaluation Agent] Existing performance record found.
+[Evaluation Agent] Performance ID: 700
+[Evaluation Agent] Evaluation completed.
+
+[Evaluation Agent] Evaluating quiz performance...
+[Evaluation Agent] Topic: Test Topic
+[Evaluation Agent] Score: 74.99
+[Evaluation Agent] Level: moderate
+[Evaluation Agent] Existing performance record found.
+[Evaluation Agent] Performance ID: 700
+[Evaluation Agent] Evaluation completed.
+
+[Evaluation Agent] Evaluating quiz performance...
+[Evaluation Agent] Topic: Test Topic
+[Evaluation Agent] Score: 75.0
+[Evaluation Agent] Level: strong
+[Evaluation Agent] Existing performance record found.
+[Evaluation Agent] Performance ID: 700
+[Evaluation Agent] Evaluation completed.
+ok
+test_moderate_score (test_evaluation_agent.TestEvaluationAgent.test_moderate_score) ... 
+[Evaluation Agent] Evaluating quiz performance...
+[Evaluation Agent] Topic: Test Topic
+[Evaluation Agent] Score: 60.0
+[Evaluation Agent] Level: moderate
+[Evaluation Agent] Existing performance record found.
+[Evaluation Agent] Performance ID: 700
+[Evaluation Agent] Evaluation completed.
+ok
+test_strong_score (test_evaluation_agent.TestEvaluationAgent.test_strong_score) ... 
+[Evaluation Agent] Evaluating quiz performance...
+[Evaluation Agent] Topic: Test Topic
+[Evaluation Agent] Score: 90.0
+[Evaluation Agent] Level: strong
+[Evaluation Agent] Existing performance record found.
+[Evaluation Agent] Performance ID: 700
+[Evaluation Agent] Evaluation completed.
+ok
+test_weak_score (test_evaluation_agent.TestEvaluationAgent.test_weak_score) ... 
+[Evaluation Agent] Evaluating quiz performance...
+[Evaluation Agent] Topic: Test Topic
+[Evaluation Agent] Score: 40.0
+[Evaluation Agent] Level: weak
+[Evaluation Agent] Existing performance record found.
+[Evaluation Agent] Performance ID: 700
+[Evaluation Agent] Evaluation completed.
+ok
+test_boundary_scores (test_performance_rules.TestPerformanceRules.test_boundary_scores) ... ok
+test_invalid_priority_level (test_performance_rules.TestPerformanceRules.test_invalid_priority_level) ... ok
+test_moderate_performance (test_performance_rules.TestPerformanceRules.test_moderate_performance) ... ok
+test_strong_performance (test_performance_rules.TestPerformanceRules.test_strong_performance) ... ok
+test_weak_performance (test_performance_rules.TestPerformanceRules.test_weak_performance) ... ok
+test_missing_evaluation_stops_workflow (test_reflection_agent.TestReflectionAgent.test_missing_evaluation_stops_workflow) ... 
+[Reflection Agent] Reflecting on evaluation...
+[Reflection Agent] Evaluation data is missing.
+ok
+test_moderate_performance_triggers_replanning (test_reflection_agent.TestReflectionAgent.test_moderate_performance_triggers_replanning) ... 
+[Reflection Agent] Reflecting on evaluation...
+[Reflection Agent] Topic: SQL Joins
+[Reflection Agent] Score: 60.0
+[Reflection Agent] Level: moderate
+[Reflection Agent] Moderate performance detected.
+ok
+test_strong_performance_completes_workflow (test_reflection_agent.TestReflectionAgent.test_strong_performance_completes_workflow) ... 
+[Reflection Agent] Reflecting on evaluation...
+[Reflection Agent] Topic: Python OOP
+[Reflection Agent] Score: 90.0
+[Reflection Agent] Level: strong
+[Reflection Agent] Strong performance detected.
+ok
+test_unknown_performance_level_stops_workflow (test_reflection_agent.TestReflectionAgent.test_unknown_performance_level_stops_workflow) ... 
+[Reflection Agent] Reflecting on evaluation...
+[Reflection Agent] Topic: Test Topic
+[Reflection Agent] Score: 65.0
+[Reflection Agent] Level: unknown
+[Reflection Agent] Unknown performance level.
+ok
+test_weak_performance_triggers_replanning (test_reflection_agent.TestReflectionAgent.test_weak_performance_triggers_replanning) ... 
+[Reflection Agent] Reflecting on evaluation...
+[Reflection Agent] Topic: Normalization
+[Reflection Agent] Score: 40.0
+[Reflection Agent] Level: weak
+[Reflection Agent] Weak performance detected.
+ok
+test_daily_time_limit_is_enforced (test_validation_agent.TestValidationAgent.test_daily_time_limit_is_enforced) ... 
+[Validation Agent] Validating study plan...
+[Validation Agent] 2026-10-12: 250 / 240 minutes
+[Validation Agent] Plan requires correction.
+[Validation Agent] ERROR: Study plan exceeds available study time on 2026-10-12: 250 minutes scheduled, but only 240 minutes are available.
+ok
+test_empty_plan_is_rejected (test_validation_agent.TestValidationAgent.test_empty_plan_is_rejected) ... 
+[Validation Agent] Validating study plan...
+[Validation Agent] Plan requires correction.
+[Validation Agent] ERROR: Study plan contains no sessions.
+ok
+test_impossible_calendar_date_is_rejected (test_validation_agent.TestValidationAgent.test_impossible_calendar_date_is_rejected) ... 
+[Validation Agent] Validating study plan...
+[Validation Agent] 2026-99-99: 60 / 240 minutes
+[Validation Agent] Plan requires correction.
+[Validation Agent] ERROR: Invalid session date 2026-99-99. Expected a valid date in YYYY-MM-DD format.
+ok
+test_incorrect_date_format_is_rejected (test_validation_agent.TestValidationAgent.test_incorrect_date_format_is_rejected) ... 
+[Validation Agent] Validating study plan...
+[Validation Agent] 12-10-2026: 60 / 240 minutes
+[Validation Agent] Plan requires correction.
+[Validation Agent] ERROR: Invalid session date 12-10-2026. Expected a valid date in YYYY-MM-DD format.
+ok
+test_invalid_duration_is_rejected (test_validation_agent.TestValidationAgent.test_invalid_duration_is_rejected) ... 
+[Validation Agent] Validating study plan...
+[Validation Agent] Plan requires correction.
+[Validation Agent] ERROR: Study session on 2026-10-12 has invalid duration.
+ok
+test_missing_date_is_rejected (test_validation_agent.TestValidationAgent.test_missing_date_is_rejected) ... 
+[Validation Agent] Validating study plan...
+[Validation Agent] Plan requires correction.
+[Validation Agent] ERROR: A study session is missing a scheduled date.
+[Validation Agent] ERROR: Session 1 is missing required field: date.
+ok
+test_missing_required_field_is_rejected (test_validation_agent.TestValidationAgent.test_missing_required_field_is_rejected) ... 
+[Validation Agent] Validating study plan...
+[Validation Agent] 2026-10-12: 60 / 240 minutes
+[Validation Agent] Plan requires correction.
+[Validation Agent] ERROR: Session 1 is missing required field: priority.
+ok
+test_no_available_daily_study_time_is_rejected (test_validation_agent.TestValidationAgent.test_no_available_daily_study_time_is_rejected) ... 
+[Validation Agent] Validating study plan...
+[Validation Agent] 2026-10-12: 60 / 0 minutes
+[Validation Agent] Plan requires correction.
+[Validation Agent] ERROR: Student has no available daily study time.
+[Validation Agent] ERROR: Study plan exceeds available study time on 2026-10-12: 60 minutes scheduled, but only 0 minutes are available.
+ok
+test_non_numeric_duration_is_rejected (test_validation_agent.TestValidationAgent.test_non_numeric_duration_is_rejected) ... 
+[Validation Agent] Validating study plan...
+[Validation Agent] Plan requires correction.
+[Validation Agent] ERROR: Invalid duration for session on 2026-10-12.
+ok
+test_non_padded_date_format_is_rejected (test_validation_agent.TestValidationAgent.test_non_padded_date_format_is_rejected) ... 
+[Validation Agent] Validating study plan...
+[Validation Agent] 2026-1-2: 60 / 240 minutes
+[Validation Agent] Plan requires correction.
+[Validation Agent] ERROR: Invalid session date 2026-1-2. Expected a valid date in YYYY-MM-DD format.
+ok
+test_timestamp_in_date_is_rejected (test_validation_agent.TestValidationAgent.test_timestamp_in_date_is_rejected) ... 
+[Validation Agent] Validating study plan...
+[Validation Agent] 2026-10-12T10:30:00: 60 / 240 minutes
+[Validation Agent] Plan requires correction.
+[Validation Agent] ERROR: Session date 2026-10-12T10:30:00 contains a timestamp. Expected YYYY-MM-DD.
+ok
+test_valid_calendar_date_is_accepted (test_validation_agent.TestValidationAgent.test_valid_calendar_date_is_accepted) ... 
+[Validation Agent] Validating study plan...
+[Validation Agent] 2026-10-12: 60 / 240 minutes
+[Validation Agent] Study plan is valid.
+ok
+test_valid_plan_is_accepted (test_validation_agent.TestValidationAgent.test_valid_plan_is_accepted) ... 
+[Validation Agent] Validating study plan...
+[Validation Agent] 2026-10-12: 60 / 240 minutes
+[Validation Agent] 2026-10-13: 45 / 240 minutes
+[Validation Agent] Study plan is valid.
+ok
+
+----------------------------------------------------------------------
+Ran 37 tests in 0.073s

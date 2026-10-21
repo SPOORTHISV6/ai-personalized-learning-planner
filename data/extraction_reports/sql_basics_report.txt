@@ -1,0 +1,110 @@
+PDF: sql_basics.pdf
+Extracted characters: 12443
+Potentially suspicious lines: 53
+
+Page 1, line 12: G
+  Possible issues: Possible stray G marker
+Page 1, line 14: G
+  Possible issues: Possible stray G marker
+Page 1, line 16: G
+  Possible issues: Possible stray G marker
+Page 1, line 18: G
+  Possible issues: Possible stray G marker
+Page 1, line 20: G
+  Possible issues: Possible stray G marker
+Page 1, line 23: Departments(dept_id, dept_name)
+  Possible issues: Possible fragmented text
+Page 2, line 32: (30, 'Electronics');
+  Possible issues: Possible fragmented text
+Page 3, line 13: G
+  Possible issues: Possible stray G marker
+Page 3, line 15: G
+  Possible issues: Possible stray G marker
+Page 3, line 17: G
+  Possible issues: Possible stray G marker
+Page 3, line 19: G
+  Possible issues: Possible stray G marker
+Page 3, line 21: G
+  Possible issues: Possible stray G marker
+Page 3, line 23: G
+  Possible issues: Possible stray G marker
+Page 3, line 31: or OFFSET/FETCH.
+  Possible issues: Possible fragmented text
+Page 3, line 39: G
+  Possible issues: Possible stray G marker
+Page 3, line 41: G
+  Possible issues: Possible stray G marker
+Page 3, line 43: G
+  Possible issues: Possible stray G marker
+Page 3, line 45: G
+  Possible issues: Possible stray G marker
+Page 3, line 47: G
+  Possible issues: Possible stray G marker
+Page 4, line 5: FROM Students
+  Possible issues: Possibly incomplete SQL
+Page 4, line 8: FROM Marks
+  Possible issues: Possibly incomplete SQL
+Page 4, line 12: FROM Students
+  Possible issues: Possibly incomplete SQL
+Page 4, line 21: INNER JOIN
+  Possible issues: Possibly incomplete SQL
+Page 4, line 26: LEFT JOIN
+  Possible issues: Possibly incomplete SQL
+Page 4, line 31: RIGHT JOIN
+  Possible issues: Possibly incomplete SQL
+Page 5, line 6: FROM Students
+  Possible issues: Possibly incomplete SQL
+Page 5, line 9: SELECT student_name
+  Possible issues: Possible fragmented text, Possibly incomplete SQL
+Page 5, line 10: FROM Students
+  Possible issues: Possibly incomplete SQL
+Page 5, line 21: FROM Students;
+  Possible issues: Possibly incomplete SQL
+Page 5, line 36: G
+  Possible issues: Possible stray G marker
+Page 5, line 38: G
+  Possible issues: Possible stray G marker
+Page 5, line 40: G
+  Possible issues: Possible stray G marker
+Page 5, line 42: G
+  Possible issues: Possible stray G marker
+Page 5, line 44: G
+  Possible issues: Possible stray G marker
+Page 5, line 46: G
+  Possible issues: Possible stray G marker
+Page 5, line 48: G
+  Possible issues: Possible stray G marker
+Page 5, line 50: G
+  Possible issues: Possible stray G marker
+Page 6, line 4: WHERE
+  Possible issues: Possibly incomplete SQL
+Page 6, line 7: SELECT
+  Possible issues: Possibly incomplete SQL
+Page 6, line 37: FROM Students
+  Possible issues: Possibly incomplete SQL
+Page 6, line 41: FROM Students
+  Possible issues: Possibly incomplete SQL
+Page 7, line 5: FROM Marks
+  Possible issues: Possibly incomplete SQL
+Page 7, line 9: FROM Marks
+  Possible issues: Possibly incomplete SQL
+Page 7, line 19: FROM Students
+  Possible issues: Possibly incomplete SQL
+Page 7, line 23: FROM Marks;
+  Possible issues: Possibly incomplete SQL
+Page 7, line 25: G
+  Possible issues: Possible stray G marker
+Page 7, line 27: G
+  Possible issues: Possible stray G marker
+Page 7, line 29: G
+  Possible issues: Possible stray G marker
+Page 7, line 31: G
+  Possible issues: Possible stray G marker
+Page 7, line 33: G
+  Possible issues: Possible stray G marker
+Page 7, line 35: G
+  Possible issues: Possible stray G marker
+Page 7, line 37: G
+  Possible issues: Possible stray G marker
+Page 7, line 40: G
+  Possible issues: Possible stray G marker

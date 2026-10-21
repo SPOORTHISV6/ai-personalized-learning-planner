@@ -1,0 +1,56 @@
+{
+  "evaluation": "Resource Quality Evaluation",
+  "topics_tested": 4,
+  "topics_successful": 4,
+  "total_resources": 30,
+  "results": [
+    {
+      "topic": "normalization",
+      "display_name": "Normalization",
+      "subject_name": "DBMS",
+      "knowledge_base": "normalization",
+      "resource_count": 9,
+      "content_validity": 1.0,
+      "section_validity": 1.0,
+      "substantive_rate": 1.0,
+      "source_traceability": 1.0,
+      "duplicate_rate": 0.0
+    },
+    {
+      "topic": "sql joins",
+      "display_name": "SQL Joins",
+      "subject_name": "DBMS",
+      "knowledge_base": "sql_joins",
+      "resource_count": 7,
+      "content_validity": 1.0,
+      "section_validity": 1.0,
+      "substantive_rate": 1.0,
+      "source_traceability": 1.0,
+      "duplicate_rate": 0.0
+    },
+    {
+      "topic": "python oop",
+      "display_name": "Python OOP",
+      "subject_name": "Python",
+      "knowledge_base": "python",
+      "resource_count": 9,
+      "content_validity": 1.0,
+      "section_validity": 1.0,
+      "substantive_rate": 1.0,
+      "source_traceability": 1.0,
+      "duplicate_rate": 0.0
+    },
+    {
+      "topic": "sql basics",
+      "display_name": "SQL Basics",
+      "subject_name": "DBMS",
+      "knowledge_base": "sql_basics",
+      "resource_count": 5,
+      "content_validity": 1.0,
+      "section_validity": 1.0,
+      "substantive_rate": 1.0,
+      "source_traceability": 1.0,
+      "duplicate_rate": 0.0
+    }
+  ]
+}
