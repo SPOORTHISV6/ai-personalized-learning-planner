@@ -14,3 +14,4 @@ PyJWT
 pytest
 PyMySQL
 langgraph
+PyMuPDF
