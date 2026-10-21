@@ -1,4 +1,5 @@
 fastapi
+faiss-cpu
 uvicorn
 streamlit
 sqlalchemy
@@ -10,3 +11,5 @@ numpy
 pwdlib[argon2]
 PyJWT
 pytest
+PyMySQL
+langgraph
