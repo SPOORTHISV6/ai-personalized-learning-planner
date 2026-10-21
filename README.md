@@ -48,9 +48,8 @@ The goal is simple: **help students focus on what they need to learn next, rathe
 | 🛡️ Plan Validation | Checks generated study plans before accepting them. |
 | 🧪 Automated Testing | Includes tests for agents, workflows, API routes, persistence, and database integration. |
 
-## 🏗️ System Architecture
 
-The application is organized into specialized agents and workflows rather than placing the entire learning process inside one large function.
+## 🏗️ System Architecture
 
 ```mermaid
 flowchart TD
@@ -72,6 +71,9 @@ flowchart TD
     D <--> P[("MySQL Database")]
     N <--> P
 ```
+
+
+
 
 ### 🔍 Workflow Explanation
 
