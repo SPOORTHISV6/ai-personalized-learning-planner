@@ -1,5 +1,7 @@
 # 🎓 AI Personalized Learning & Study Planner
 
+
+![Automated Tests](https://github.com/SPOORTHISV6/ai-personalized-learning-planner/actions/workflows/tests.yml/badge.svg)
 ### Turning student performance into personalized learning paths with Agentic AI and RAG
 
 <p align="center">
