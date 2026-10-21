@@ -9,3 +9,4 @@ pandas
 numpy
 pwdlib[argon2]
 PyJWT
+pytest
