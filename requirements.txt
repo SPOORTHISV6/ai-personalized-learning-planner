@@ -2,6 +2,7 @@ fastapi
 faiss-cpu
 uvicorn
 streamlit
+sentence-transformers
 sqlalchemy
 psycopg2-binary
 python-dotenv
