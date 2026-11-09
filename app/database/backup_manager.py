@@ -1,4 +1,4 @@
-﻿
+
 import logging
 import re
 import shutil
@@ -458,29 +458,82 @@ def main():
 
     configure_logging()
 
+    # ========================================================
+    # STEP 1: CREATE LOCAL DATABASE BACKUP
+    # ========================================================
+
     try:
 
         backup_path = create_backup()
 
-        print("\nBACKUP RESULT: SUCCESS")
-
-        print(
-            "Backup file:",
-            backup_path
-        )
+        print("\nLOCAL BACKUP RESULT: SUCCESS")
+        print("Backup file:", backup_path)
 
     except Exception as exc:
 
-        print("\nBACKUP RESULT: FAILED")
+        logging.exception("Local database backup failed.")
 
-        print(
-            "Reason:",
-            exc
-        )
+        print("\nLOCAL BACKUP RESULT: FAILED")
+        print("Reason:", exc)
 
         raise SystemExit(1)
 
+    # ========================================================
+    # STEP 2: UPLOAD BACKUP TO GOOGLE DRIVE
+    # ========================================================
+
+    try:
+
+        from app.database.google_drive_backup import upload_backup
+
+        cloud_result = upload_backup(backup_path)
+
+        logging.info(
+            "Google Drive backup completed: %s",
+            cloud_result["file_name"]
+        )
+
+        print("\nCLOUD BACKUP RESULT: SUCCESS")
+        print("Drive file:", cloud_result["file_name"])
+        print("Drive file ID:", cloud_result["file_id"])
+        print("SHA256:", cloud_result["sha256"])
+
+        # Use .get() so older test mocks or optional fields
+        # do not cause KeyError.
+        retention_result = cloud_result.get("cloud_retention")
+
+        if retention_result is not None:
+            print("Cloud retention:", retention_result)
+        else:
+            print("Cloud retention: Not reported")
+
+        already_exists = cloud_result.get(
+            "already_exists",
+            False
+        )
+
+        if already_exists:
+            print("Upload status: Existing identical backup reused.")
+        else:
+            print("Upload status: New backup uploaded.")
+
+        print("\nBACKUP RESULT: LOCAL AND CLOUD SUCCESS")
+
+    except Exception as exc:
+
+        logging.exception(
+            "Google Drive upload failed. "
+            "The verified local backup remains available."
+        )
+
+        print("\nCLOUD BACKUP RESULT: FAILED")
+        print("Reason:", exc)
+        print("LOCAL BACKUP RESULT: SUCCESS")
+
+        # Exit code 2 means local backup succeeded,
+        # but cloud backup or its retention operation failed.
+        raise SystemExit(2)
+
 
 if __name__ == "__main__":
-
     main()
