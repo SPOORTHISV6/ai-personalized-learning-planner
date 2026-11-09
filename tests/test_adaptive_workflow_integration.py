@@ -122,6 +122,15 @@ class TestAdaptiveWorkflowIntegration(unittest.TestCase):
                 "persistence_agent",
                 self.fake_persistence,
             ),
+            patch(
+                "app.agents.study_plan_agent.get_owned_topic_ids",
+                return_value={3},
+            ),
+
+            patch(
+                "app.agents.validation_agent.get_owned_topic_ids",
+                return_value={3},
+            ),
         ]
 
         for patcher in patches:

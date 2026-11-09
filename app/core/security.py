@@ -1,6 +1,5 @@
-import os
 from datetime import datetime, timedelta, timezone
-
+from app.core.config import get_jwt_secret_key
 import jwt
 from pwdlib import PasswordHash
 
@@ -12,16 +11,8 @@ password_hasher = PasswordHash.recommended()
 
 
 def get_secret_key() -> str:
-    """Read the signing key from the environment."""
-    secret_key = os.getenv("JWT_SECRET_KEY")
-
-    if not secret_key or len(secret_key) < 32:
-        raise RuntimeError(
-            "JWT_SECRET_KEY must be set to a random value "
-            "of at least 32 characters."
-        )
-
-    return secret_key
+    """Read and validate the JWT signing key."""
+    return get_jwt_secret_key()
 
 
 def hash_password(password: str) -> str:
@@ -45,6 +36,27 @@ def create_access_token(
     expires_minutes: int = ACCESS_TOKEN_EXPIRE_MINUTES,
 ) -> str:
     """Create a signed JWT for a student."""
+
+    # Reject booleans, floats, strings, and invalid IDs.
+    if (
+        isinstance(student_id, bool)
+        or not isinstance(student_id, int)
+        or student_id <= 0
+    ):
+        raise ValueError(
+            "student_id must be a positive integer."
+        )
+
+    # Expiration must be a positive integer.
+    if (
+        isinstance(expires_minutes, bool)
+        or not isinstance(expires_minutes, int)
+        or expires_minutes <= 0
+    ):
+        raise ValueError(
+            "expires_minutes must be a positive integer."
+        )
+
     now = datetime.now(timezone.utc)
 
     payload = {

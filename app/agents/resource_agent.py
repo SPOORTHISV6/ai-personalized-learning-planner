@@ -198,9 +198,16 @@ def normalize_content(content):
 
 
 def get_knowledge_base(topic_name):
-    """Map topic names to their vector-store directories."""
-    normalized = str(topic_name or "").strip().lower()
-    return TOPIC_MAP.get(normalized, normalized.replace(" ", "_"))
+    """Return an explicitly supported knowledge base, or None."""
+    if not isinstance(topic_name, str):
+        return None
+
+    normalized = topic_name.strip().casefold()
+
+    if not normalized or normalized not in TOPIC_MAP:
+        return None
+
+    return TOPIC_MAP[normalized]
 
 
 # ---------------------------------------------------------
@@ -214,7 +221,10 @@ def is_excluded_section(section_title):
     if not title:
         return True
 
-    excluded = {compact_title(item) for item in EXCLUDED_SECTIONS}
+    excluded = {
+        compact_title(item)
+        for item in EXCLUDED_SECTIONS
+    }
 
     if title in excluded:
         return True
@@ -230,7 +240,10 @@ def is_excluded_section(section_title):
     ):
         return True
 
-    if re.match(r"^(https?://|www\.|ISBN\b|ISSN\b|DOI\b)", title):
+    if re.match(
+        r"^(https?://|www\.|ISBN\b|ISSN\b|DOI\b)",
+        title,
+    ):
         return True
 
     return False
@@ -378,18 +391,35 @@ def is_substantive_chunk(candidate, knowledge_base):
 # ---------------------------------------------------------
 
 def load_vector_store(topic_name):
-    """Load FAISS index and matching chunk metadata."""
-    index_path = os.path.join(
-        VECTOR_STORE_DIR, topic_name, "index.faiss"
+    """Load a supported FAISS index and strictly validated metadata."""
+    allowed_directories = set(TOPIC_MAP.values())
+
+    if (
+        not isinstance(topic_name, str)
+        or topic_name not in allowed_directories
+    ):
+        print("[Vector Store] Unsupported knowledge base.")
+        return None, None
+
+    base_dir = os.path.realpath(VECTOR_STORE_DIR)
+    topic_dir = os.path.realpath(
+        os.path.join(base_dir, topic_name)
     )
-    metadata_path = os.path.join(
-        VECTOR_STORE_DIR, topic_name, "metadata.json"
-    )
+
+    if os.path.commonpath([base_dir, topic_dir]) != base_dir:
+        print("[Vector Store] Invalid knowledge-base path.")
+        return None, None
+
+    index_path = os.path.join(topic_dir, "index.faiss")
+    metadata_path = os.path.join(topic_dir, "metadata.json")
 
     print(f"[Resource Agent] Index: {index_path}")
     print(f"[Resource Agent] Metadata: {metadata_path}")
 
-    if not os.path.exists(index_path) or not os.path.exists(metadata_path):
+    if (
+        not os.path.isfile(index_path)
+        or not os.path.isfile(metadata_path)
+    ):
         print("[Vector Store] Index or metadata file not found.")
         return None, None
 
@@ -399,22 +429,50 @@ def load_vector_store(topic_name):
         with open(metadata_path, "r", encoding="utf-8") as file:
             metadata = json.load(file)
 
-    except (OSError, ValueError, RuntimeError) as exc:
-        print(f"[Vector Store] Could not load index: {exc}")
+    except (OSError, ValueError, RuntimeError, TypeError) as exc:
+        print(
+            f"[Vector Store] Could not load index: "
+            f"{type(exc).__name__}"
+        )
         return None, None
 
     if not isinstance(metadata, list):
         print("[Vector Store] Invalid metadata format.")
         return None, None
 
-    if index.ntotal != len(metadata):
+    for entry in metadata:
+        if not isinstance(entry, dict):
+            print("[Vector Store] Metadata contains a non-object entry.")
+            return None, None
+
+        title = entry.get("section_title")
+        content = entry.get("content") or entry.get("text")
+
+        if not isinstance(title, str) or not title.strip():
+            print(
+                "[Vector Store] Metadata entry has an invalid section title."
+            )
+            return None, None
+
+        if not isinstance(content, str) or not content.strip():
+            print("[Vector Store] Metadata entry has invalid content.")
+            return None, None
+
+    try:
+        vector_count = int(index.ntotal)
+
+    except (AttributeError, TypeError, ValueError):
+        print("[Vector Store] Invalid FAISS index.")
+        return None, None
+
+    if vector_count < 0 or vector_count != len(metadata):
         print(
-            "[Vector Store] WARNING: index count "
-            f"{index.ntotal} differs from metadata count {len(metadata)}."
+            "[Vector Store] FAISS index and metadata counts do not match."
         )
+        return None, None
 
     print("[Vector Store] Existing FAISS index loaded.")
-    print(f"[Vector Store] Vectors: {index.ntotal}")
+    print(f"[Vector Store] Vectors: {vector_count}")
     print(f"[Vector Store] Chunks: {len(metadata)}")
 
     return index, metadata
@@ -477,8 +535,10 @@ def build_rag_query(topic_name, subject_name, learning_status=None):
             ", beginner-friendly explanations, step-by-step examples, "
             "common mistakes, practice questions"
         )
+
     elif learning_status == "moderate":
         focus += ", applied examples, practice, revision"
+
     else:
         focus += ", revision and reinforcement examples"
 
@@ -489,12 +549,21 @@ def build_rag_query(topic_name, subject_name, learning_status=None):
 # FAISS SEARCH
 # ---------------------------------------------------------
 
-def search_vector_store(index, metadata, query_embedding, top_k=TOP_K):
+def search_vector_store(
+    index,
+    metadata,
+    query_embedding,
+    top_k=TOP_K,
+):
     """Retrieve chunks and calculate similarity scores."""
     if index is None or not metadata:
         return []
 
-    count = min(max(top_k, FINAL_RESULTS), index.ntotal, len(metadata))
+    count = min(
+        max(top_k, FINAL_RESULTS),
+        index.ntotal,
+        len(metadata),
+    )
 
     if count <= 0:
         return []
@@ -502,7 +571,9 @@ def search_vector_store(index, metadata, query_embedding, top_k=TOP_K):
     scores, indices = index.search(query_embedding, count)
     results = []
 
-    is_l2 = getattr(index, "metric_type", None) == faiss.METRIC_L2
+    is_l2 = (
+        getattr(index, "metric_type", None) == faiss.METRIC_L2
+    )
 
     for raw_score, idx in zip(scores[0], indices[0]):
         idx = int(idx)
@@ -620,7 +691,8 @@ def remove_duplicate_sections(candidates):
                 continue
 
             overlap = len(tokens & previous_tokens) / max(
-                1, min(len(tokens), len(previous_tokens))
+                1,
+                min(len(tokens), len(previous_tokens)),
             )
 
             if overlap >= 0.90:
@@ -673,6 +745,7 @@ def section_matches_terms(section_title, terms):
 # ---------------------------------------------------------
 # NORMALIZATION CURRICULUM LEVELS
 # ---------------------------------------------------------
+
 def _normalization_level(section_title):
     """
     Identify genuine Normalization curriculum headings.
@@ -766,6 +839,7 @@ def select_diverse_results(
                     > previous.get("ranking_score", 0.0)
                 ):
                     best_by_level[level] = candidate
+
             else:
                 print(
                     "[Resource Agent] Ignoring non-curriculum heading: "
@@ -852,95 +926,106 @@ def retrieve_topic_resources(
     subject_name,
     learning_status=None,
 ):
-    """Retrieve, filter, rank, and select resources for one topic."""
-    print(f"\n[Resource Agent] Topic: {topic_name}")
-    print(f"[Resource Agent] Subject: {subject_name}")
-
+    """Retrieve, filter, rank, and select resources for one supported topic."""
     knowledge_base = get_knowledge_base(topic_name)
 
-    print(
-        f"[Resource Agent] Using topic knowledge base: {knowledge_base}"
-    )
-
-    index, metadata = load_vector_store(knowledge_base)
-
-    if index is None or metadata is None or index.ntotal == 0:
+    if knowledge_base is None:
+        print("[Resource Agent] Unsupported topic; retrieval skipped.")
         return []
 
-    model = get_embedding_model()
+    if not isinstance(subject_name, str):
+        print("[Resource Agent] Invalid subject name; retrieval skipped.")
+        return []
 
-    query = build_rag_query(
-        topic_name,
-        subject_name,
-        learning_status,
-    )
+    print(f"\n[Resource Agent] Topic: {topic_name}")
+    print(f"[Resource Agent] Subject: {subject_name}")
+    print(f"[Resource Agent] Using topic knowledge base: {knowledge_base}")
 
-    print(f"[Resource Agent] RAG Query: {query}")
+    try:
+        index, metadata = load_vector_store(knowledge_base)
 
-    query_embedding = create_query_embedding(query, model)
+        if index is None or metadata is None or index.ntotal == 0:
+            return []
 
-    candidates = search_vector_store(
-        index,
-        metadata,
-        query_embedding,
-        top_k=min(TOP_K, index.ntotal),
-    )
+        model = get_embedding_model()
 
-    print(f"[Resource Agent] Retrieved candidates: {len(candidates)}")
-
-    filtered = []
-
-    for candidate in candidates:
-        title = candidate.get("section_title", "")
-
-        candidate["content"] = (
-            candidate.get("content") or candidate.get("text") or ""
+        query = build_rag_query(
+            topic_name,
+            subject_name,
+            learning_status,
         )
 
-        if is_excluded_section(title):
-            print(
-                "[Resource Agent] Excluded section: "
-                f"{title or 'Untitled'}"
-            )
-            continue
+        print(f"[Resource Agent] RAG Query: {query}")
 
-        if not is_substantive_chunk(candidate, knowledge_base):
-            print(
-                "[Resource Agent] Rejected weak chunk: "
-                f"{title or 'Untitled'}"
-            )
-            continue
+        query_embedding = create_query_embedding(query, model)
 
-        candidate["ranking_score"] = calculate_ranking_score(
-            candidate.get("similarity_score", 0.0),
-            title,
+        candidates = search_vector_store(
+            index,
+            metadata,
+            query_embedding,
+            top_k=min(TOP_K, index.ntotal),
+        )
+
+        filtered = []
+
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+
+            title = candidate.get("section_title", "")
+
+            candidate["content"] = (
+                candidate.get("content")
+                or candidate.get("text")
+                or ""
+            )
+
+            if is_excluded_section(title):
+                continue
+
+            if not is_substantive_chunk(candidate, knowledge_base):
+                continue
+
+            candidate["ranking_score"] = calculate_ranking_score(
+                candidate.get("similarity_score", 0.0),
+                title,
+                knowledge_base,
+            )
+
+            filtered.append(candidate)
+
+        filtered.sort(
+            key=lambda item: item.get("ranking_score", 0.0),
+            reverse=True,
+        )
+
+        filtered = remove_duplicate_sections(filtered)
+
+        selected = select_diverse_results(
+            filtered,
             knowledge_base,
+            FINAL_RESULTS,
         )
 
-        filtered.append(candidate)
+        print(
+            f"[Resource Agent] Accepted results for "
+            f"{topic_name}: {len(selected)}"
+        )
 
-    filtered.sort(
-        key=lambda item: item.get("ranking_score", 0.0),
-        reverse=True,
-    )
+        for resource in selected:
+            print(
+                f"  -> {resource.get('section_title', 'General')}"
+            )
 
-    filtered = remove_duplicate_sections(filtered)
+        return selected
 
-    selected = select_diverse_results(
-        filtered,
-        knowledge_base,
-        FINAL_RESULTS,
-    )
-
-    print(
-        f"[Resource Agent] Accepted results for {topic_name}: "
-        f"{len(selected)}"
-    )
-
-    for resource in selected:
-        print(f"  -> {resource.get('section_title', 'General')}")
-
-    return selected
+    except Exception as exc:
+        # Do not expose filesystem paths, document content, or model internals.
+        print(
+            f"[Resource Agent] Retrieval failed: "
+            f"{type(exc).__name__}"
+        )
+        return []
 
 
 # ---------------------------------------------------------
@@ -948,26 +1033,68 @@ def retrieve_topic_resources(
 # ---------------------------------------------------------
 
 def resource_agent(state):
-    """Retrieve filtered learning resources for all learning gaps."""
+    """Retrieve filtered learning resources for validated learning gaps."""
     print("\n[Resource Agent] Finding learning resources...")
+
+    def invalid_state(message):
+        return {
+            "next_action": "stop",
+            "errors": [message],
+            "resources": [],
+        }
+
+    if not isinstance(state, dict):
+        return invalid_state(
+            "Resource agent received an invalid workflow state."
+        )
+
+    learning_gaps = state.get("learning_gaps")
+
+    if not isinstance(learning_gaps, list):
+        return invalid_state(
+            "Learning gaps must be provided as a list."
+        )
+
+    if any(not isinstance(gap, dict) for gap in learning_gaps):
+        return invalid_state(
+            "Learning gaps contain an invalid entry."
+        )
 
     all_resources = []
 
-    for gap in state.get("learning_gaps", []):
+    for gap in learning_gaps:
         topic_name = gap.get("topic_name")
 
-        if not topic_name:
-            continue
+        if not isinstance(topic_name, str) or not topic_name.strip():
+            return invalid_state(
+                "A learning gap has an invalid topic name."
+            )
 
         subject_name = gap.get("subject_name", "")
 
-        resources = retrieve_topic_resources(
-            topic_name=topic_name,
-            subject_name=subject_name,
-            learning_status=gap.get("status"),
-        )
+        if not isinstance(subject_name, str):
+            return invalid_state(
+                "A learning gap has an invalid subject name."
+            )
+
+        try:
+            resources = retrieve_topic_resources(
+                topic_name=topic_name,
+                subject_name=subject_name,
+                learning_status=gap.get("status"),
+            )
+
+        except Exception as exc:
+            print(
+                f"[Resource Agent] Topic retrieval failed: "
+                f"{type(exc).__name__}"
+            )
+            resources = []
 
         for resource in resources:
+            if not isinstance(resource, dict):
+                continue
+
             all_resources.append({
                 "topic_id": gap.get("topic_id"),
                 "topic_name": topic_name,
@@ -998,4 +1125,5 @@ def resource_agent(state):
     )
 
     state["resources"] = all_resources
+
     return state

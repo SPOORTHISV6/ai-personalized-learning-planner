@@ -1,10 +1,11 @@
-
 import unittest
+from unittest.mock import patch
 
 from app.agents.performance_rules import (
     classify_performance,
     priority_for_level,
 )
+
 from app.agents.study_plan_agent import (
     build_topic_lookup,
     study_plan_agent,
@@ -37,7 +38,14 @@ class TestStudyPlanAgentPerformance(unittest.TestCase):
                 self.assertEqual(lookup[topic_id]["status"], status)
                 self.assertEqual(lookup[topic_id]["priority"], priority)
 
-    def test_study_plan_selects_weak_and_moderate_topics(self):
+    @patch(
+        "app.agents.study_plan_agent.get_owned_topic_ids",
+        return_value={201, 202, 203},
+    )
+    def test_study_plan_selects_weak_and_moderate_topics(
+        self,
+        mock_owned_topics,
+    ):
         state = {
             "student_profile": {
                 "student_id": 999,

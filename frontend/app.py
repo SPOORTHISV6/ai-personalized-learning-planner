@@ -1,32 +1,37 @@
-
 import os
-import requests
 import streamlit as st
 from datetime import datetime
+from urllib.parse import urlparse
+
+from frontend.resource_security import resolve_resource_path
+from frontend.api_client import request_api
 
 # ============================================================
-# CONFIGURATION
-# ============================================================
+from pathlib import Path
+from dotenv import load_dotenv
 
+# Project root directory
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+# Load environment variables from the project root .env
+load_dotenv(
+    dotenv_path=PROJECT_ROOT / ".env",
+    override=False,
+)
+
+# Read API URL
 API_BASE_URL = os.getenv(
     "API_BASE_URL",
-    "http://127.0.0.1:8000",
-)
+    "http://127.0.0.1:8001",
+).strip().rstrip("/")
 
-STUDENT_ID = 1
-QUIZ_ID = 2
+# Validate API URL
+if not API_BASE_URL.startswith(("http://", "https://")):
+    raise RuntimeError(
+        "API_BASE_URL must start with http:// or https://."
+    )
 REQUEST_TIMEOUT = 60
-
-PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.abspath(__file__))
-)
-
-TOPIC_NAMES = {
-    1: "SQL Basics",
-    2: "SQL Joins",
-    3: "Normalization",
-    4: "Python OOP",
-}
+TOPIC_NAMES = {}
 
 
 # ============================================================
@@ -44,108 +49,88 @@ st.set_page_config(
 # SESSION STATE
 # ============================================================
 
-if "quiz_result" not in st.session_state:
-    st.session_state.quiz_result = None
+for key, default in {
+    "quiz_result": None,
+    "access_token": None,
+    "student": None,
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 
 # ============================================================
 # API HELPERS
 # ============================================================
 
-def api_request(method, endpoint, **kwargs):
-    """Send an HTTP request to the FastAPI backend."""
+def api_request(method, endpoint, *, show_errors=True, **kwargs):
+    """Send an API request using the isolated API client."""
 
-    url = f"{API_BASE_URL}{endpoint}"
+    token = st.session_state.get("access_token")
 
-    try:
-        response = requests.request(
-            method,
-            url,
-            timeout=REQUEST_TIMEOUT,
-            **kwargs,
-        )
+    result = request_api(
+        method,
+        endpoint,
+        api_base_url=API_BASE_URL,
+        token=token,
+        timeout=REQUEST_TIMEOUT,
+        **kwargs
+    )
 
-        response.raise_for_status()
-
-        if not response.content:
-            return {}
-
-        return response.json()
-
-    except requests.exceptions.ConnectionError:
-        st.error(
-            "Cannot connect to FastAPI.\n\n"
-            "Start the backend using:\n\n"
-            ".venv\\Scripts\\python.exe -m "
-            "uvicorn app.main:app --reload"
-        )
+    if result.unauthorized:
+        clear_authentication()
+        st.warning(result.error)
+        st.rerun()
         return None
 
-    except requests.exceptions.Timeout:
-        st.error(f"Request timed out: {endpoint}")
+    if result.error:
+        if show_errors:
+            st.error(result.error)
         return None
 
-    except requests.exceptions.HTTPError as error:
-        try:
-            details = response.json()
-        except ValueError:
-            details = response.text
-
-        st.error(
-            f"API error: {error}\n\n"
-            f"Details: {details}"
-        )
-        return None
-
-    except requests.exceptions.RequestException as error:
-        st.error(f"Request failed: {error}")
-        return None
+    return result.data
 
 
-def api_get(endpoint):
-    return api_request("GET", endpoint)
+def api_get(endpoint, *, show_errors=True):
+    return api_request(
+        "GET",
+        endpoint,
+        show_errors=show_errors,
+    )
 
 
-def api_post(endpoint, payload):
+def api_post(endpoint, payload, *, show_errors=True):
     return api_request(
         "POST",
         endpoint,
         json=payload,
+        show_errors=show_errors,
     )
 
 
 def get_student_profile():
-    return api_get(f"/students/{STUDENT_ID}")
+    return api_get("/auth/me")
 
 
 def get_dashboard():
-    return api_get(
-        f"/dashboard/student/{STUDENT_ID}"
-    )
+    student_id = st.session_state.student["student_id"]
+    return api_get(f"/dashboard/student/{student_id}")
 
 
 def get_study_plans():
-    return api_get(
-        f"/study-plans/student/{STUDENT_ID}"
-    )
+    student_id = st.session_state.student["student_id"]
+    return api_get(f"/study-plans/student/{student_id}")
 
 
 def get_plan_items(plan_id):
-    return api_get(
-        f"/study-plan-items/plan/{plan_id}"
-    )
+    return api_get(f"/study-plan-items/plan/{plan_id}")
 
 
 def get_topic_resources(topic_id):
-    return api_get(
-        f"/resources/topic/{topic_id}"
-    )
+    return api_get(f"/resources/topic/{topic_id}")
 
 
 def get_quiz_questions(quiz_id):
-    return api_get(
-        f"/quizzes/{quiz_id}/questions"
-    )
+    return api_get(f"/quizzes/{quiz_id}/questions")
 
 
 def update_session_status(item_id, status):
@@ -157,11 +142,320 @@ def update_session_status(item_id, status):
 
 
 # ============================================================
+# RESPONSE NORMALIZATION
+# ============================================================
+
+def normalize_list_response(data, *possible_keys):
+    """Handle list responses and common wrapped-list responses."""
+
+    if isinstance(data, list):
+        return data
+
+    if isinstance(data, dict):
+        for key in possible_keys:
+            value = data.get(key)
+            if isinstance(value, list):
+                return value
+
+        value = data.get("value")
+        if isinstance(value, list):
+            return value
+
+    return []
+
+
+# ============================================================
+# EXTERNAL URL VALIDATION
+# ============================================================
+
+def is_safe_external_url(value):
+    """Allow absolute HTTP(S) URLs without embedded credentials."""
+
+    if not isinstance(value, str) or not value.strip():
+        return False
+
+    try:
+        parsed = urlparse(value.strip())
+
+        return (
+            parsed.scheme.lower() in {"http", "https"}
+            and bool(parsed.netloc)
+            and parsed.username is None
+            and parsed.password is None
+        )
+
+    except (TypeError, ValueError):
+        return False
+
+
+# ============================================================
+# AUTHENTICATION
+# ============================================================
+
+def clear_authentication():
+    st.session_state.access_token = None
+    st.session_state.student = None
+    st.session_state.quiz_result = None
+
+
+def show_authentication_page():
+
+    st.title("🎓 AI Personalized Learning & Study Planner")
+
+    st.write(
+        "Sign in to access your personalized study plan, "
+        "learning dashboard, quizzes, and resources."
+    )
+
+    login_tab, register_tab = st.tabs(
+        ["Login", "Create Account"]
+    )
+
+    # --------------------------------------------------------
+    # LOGIN
+    # --------------------------------------------------------
+
+    with login_tab:
+
+        with st.form("login_form"):
+
+            login_email = st.text_input(
+                "Email",
+                key="login_email",
+            )
+
+            login_password = st.text_input(
+                "Password",
+                type="password",
+                key="login_password",
+            )
+
+            login_submitted = st.form_submit_button(
+                "Login",
+                use_container_width=True,
+            )
+
+        if login_submitted:
+
+            if not login_email.strip() or not login_password:
+
+                st.warning("Enter both your email and password.")
+
+            else:
+
+                token_data = api_post(
+                    "/auth/login",
+                    {
+                        "email": login_email.strip(),
+                        "password": login_password,
+                    },
+                )
+
+                if (
+                    not token_data
+                    or not token_data.get("access_token")
+                ):
+
+                    st.error(
+                        "Login failed. Check the API error above "
+                        "and verify your credentials."
+                    )
+
+                else:
+
+                    st.session_state.access_token = (
+                        token_data["access_token"]
+                    )
+
+                    student = api_get("/auth/me")
+
+                    if (
+                        not student
+                        or not student.get("student_id")
+                    ):
+
+                        clear_authentication()
+
+                        st.error(
+                            "Login succeeded, but the student "
+                            "profile could not be loaded."
+                        )
+
+                    else:
+
+                        st.session_state.student = student
+                        st.session_state.quiz_result = None
+                        st.rerun()
+
+    # --------------------------------------------------------
+    # REGISTRATION
+    # --------------------------------------------------------
+
+    with register_tab:
+
+        with st.form("register_form"):
+
+            register_name = st.text_input(
+                "Full Name",
+                key="register_name",
+            )
+
+            register_email = st.text_input(
+                "Email Address",
+                key="register_email",
+            )
+
+            register_password = st.text_input(
+                "Password (minimum 8 characters)",
+                type="password",
+                key="register_password",
+            )
+
+            daily_hours = st.number_input(
+                "Daily Available Study Hours",
+                min_value=0.25,
+                max_value=24.0,
+                value=2.0,
+                step=0.25,
+            )
+
+            learning_preference = st.selectbox(
+                "Learning Preference",
+                ["Practice", "Reading", "Video", "Mixed"],
+            )
+
+            register_submitted = st.form_submit_button(
+                "Create Account",
+                use_container_width=True,
+            )
+
+        if register_submitted:
+
+            if (
+                not register_name.strip()
+                or not register_email.strip()
+            ):
+
+                st.warning("Name and email are required.")
+
+            elif len(register_password) < 8:
+
+                st.warning(
+                    "Password must contain at least 8 characters."
+                )
+
+            else:
+
+                registration = api_post(
+                    "/auth/register",
+                    {
+                        "name": register_name.strip(),
+                        "email": register_email.strip(),
+                        "password": register_password,
+                        "daily_available_hours": daily_hours,
+                        "learning_preference": learning_preference,
+                    },
+                )
+
+                if not registration:
+
+                    st.error(
+                        "Registration failed. Check the API error above."
+                    )
+
+                else:
+
+                    token_data = api_post(
+                        "/auth/login",
+                        {
+                            "email": register_email.strip(),
+                            "password": register_password,
+                        },
+                    )
+
+                    if (
+                        not token_data
+                        or not token_data.get("access_token")
+                    ):
+
+                        st.success(
+                            "Account created successfully. "
+                            "Please log in using the Login tab."
+                        )
+
+                    else:
+
+                        st.session_state.access_token = (
+                            token_data["access_token"]
+                        )
+
+                        student = api_get("/auth/me")
+
+                        if (
+                            student
+                            and student.get("student_id")
+                        ):
+
+                            st.session_state.student = student
+                            st.session_state.quiz_result = None
+                            st.rerun()
+
+                        clear_authentication()
+
+                        st.success(
+                            "Account created successfully. "
+                            "Please log in using the Login tab."
+                        )
+
+
+# ============================================================
+# REQUIRE AUTHENTICATION
+# ============================================================
+
+if (
+    not st.session_state.get("access_token")
+    or not st.session_state.get("student")
+):
+
+    show_authentication_page()
+    st.stop()
+
+
+# ============================================================
+# SIDEBAR
+# ============================================================
+
+with st.sidebar:
+
+    st.write(
+        f"Signed in as **"
+        f"{st.session_state.student.get('name', 'Student')}**"
+    )
+
+    st.caption(
+        st.session_state.student.get("email", "")
+    )
+
+    if st.button(
+        "Log Out",
+        use_container_width=True,
+    ):
+
+        clear_authentication()
+        st.rerun()
+
+
+STUDENT_ID = int(
+    st.session_state.student["student_id"]
+)
+
+
+# ============================================================
 # QUIZ SUBMISSION
 # ============================================================
 
 def submit_quiz(quiz_id, answers):
-    """Submit MCQ answers for server-side grading."""
+    """Submit answers for server-side grading."""
 
     payload = {
         "student_id": STUDENT_ID,
@@ -175,64 +469,83 @@ def submit_quiz(quiz_id, answers):
 
 
 # ============================================================
-# RESPONSE NORMALIZATION HELPERS
-# ============================================================
-
-def normalize_list_response(data, *possible_keys):
-    """Handle APIs that return either a list or a wrapped list."""
-
-    if isinstance(data, list):
-        return data
-
-    if isinstance(data, dict):
-        for key in possible_keys:
-            value = data.get(key)
-            if isinstance(value, list):
-                return value
-
-    return []
-
-
-def resolve_resource_path(resource):
-    """Resolve a resource PDF path relative to the project root."""
-
-    raw_path = (
-        resource.get("content_path")
-        or resource.get("file_path")
-        or resource.get("path")
-        or ""
-    )
-
-    if not raw_path:
-        return ""
-
-    if os.path.isabs(raw_path):
-        return os.path.normpath(raw_path)
-
-    return os.path.normpath(
-        os.path.join(PROJECT_ROOT, raw_path)
-    )
-
-
-# ============================================================
-# DATA LOADING
+# LOAD AUTHENTICATED STUDENT DATA
 # ============================================================
 
 profile = get_student_profile()
+
+if profile is None:
+
+    clear_authentication()
+
+    st.warning(
+        "Your session is invalid or has expired. "
+        "Please log in again."
+    )
+
+    st.stop()
+
+
+st.session_state.student = profile
+STUDENT_ID = int(profile["student_id"])
+
 dashboard = get_dashboard()
 study_plans_response = get_study_plans()
 
-if profile is None or dashboard is None:
+if dashboard is None:
     st.stop()
 
 if study_plans_response is None:
     study_plans_response = []
+
 
 plans = normalize_list_response(
     study_plans_response,
     "plans",
     "study_plans",
 )
+
+
+# ============================================================
+# LOAD SUBJECTS AND TOPICS
+# ============================================================
+
+subjects_response = api_get("/subjects/")
+topics_response = api_get("/topics/")
+
+
+student_subjects = normalize_list_response(
+    subjects_response,
+    "subjects",
+)
+
+
+student_topics = normalize_list_response(
+    topics_response,
+    "topics",
+)
+
+
+subject_names = {
+    subject["subject_id"]: subject.get(
+        "subject_name",
+        "Subject",
+    )
+    for subject in student_subjects
+    if isinstance(subject, dict)
+    and subject.get("subject_id") is not None
+}
+
+
+TOPIC_NAMES = {
+    topic["topic_id"]: topic.get(
+        "topic_name",
+        "Topic",
+    )
+    for topic in student_topics
+    if isinstance(topic, dict)
+    and topic.get("topic_id") is not None
+}
 
 
 # ============================================================
@@ -261,16 +574,10 @@ profile_col1, profile_col2, profile_col3, profile_col4 = (
 )
 
 with profile_col1:
-    st.metric(
-        "Student",
-        profile.get("name", "N/A"),
-    )
+    st.metric("Student", profile.get("name", "N/A"))
 
 with profile_col2:
-    st.metric(
-        "Email",
-        profile.get("email", "N/A"),
-    )
+    st.metric("Email", profile.get("email", "N/A"))
 
 with profile_col3:
     st.metric(
@@ -319,6 +626,7 @@ with col4:
         dashboard.get("strong_topics", 0),
     )
 
+
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -349,103 +657,258 @@ st.divider()
 st.subheader("📝 Take Assessment")
 
 st.caption(
-    "Answer every question. The backend grades your answers "
-    "and runs the adaptive learning workflow."
+    "Choose a topic and an available quiz. "
+    "The backend grades your answers and runs the adaptive workflow."
 )
 
-quiz_questions_response = get_quiz_questions(QUIZ_ID)
 
-quiz_questions = normalize_list_response(
-    quiz_questions_response,
-    "questions",
-)
+if subjects_response is None or topics_response is None:
 
-if not quiz_questions:
+    st.warning(
+        "Unable to load subjects or topics. "
+        "Check the API errors above."
+    )
+
+elif not student_topics:
+
     st.info(
-        f"No questions are available for Quiz #{QUIZ_ID}. "
-        "Add questions through the quiz API first."
+        "No topics are available for your account. "
+        "Create a subject and add topics first."
     )
 
 else:
-    with st.form(key=f"quiz_form_{QUIZ_ID}"):
 
-        st.caption(
-            f"Quiz ID: {QUIZ_ID} | "
-            f"Total Questions: {len(quiz_questions)}"
+    topic_labels = {
+        topic["topic_id"]: (
+            f"{subject_names.get(topic.get('subject_id'), 'Subject')} · "
+            f"{topic.get('topic_name', 'Topic')} "
+            f"(ID {topic['topic_id']})"
+        )
+        for topic in student_topics
+        if isinstance(topic, dict)
+        and isinstance(topic.get("topic_id"), int)
+        and not isinstance(topic.get("topic_id"), bool)
+        and topic.get("topic_id") > 0
+    }
+
+    # --------------------------------------------------------
+    # VALIDATE TOPIC OPTIONS
+    # --------------------------------------------------------
+
+    if not topic_labels:
+
+        st.warning(
+            "No valid topics were returned by the API. "
+            "Refresh the dashboard or check the topic records."
         )
 
-        submitted_answers = []
+    else:
 
-        for index, question in enumerate(quiz_questions, start=1):
-
-            question_id = question.get("question_id")
-
-            st.markdown(
-                f"**Q{index}. "
-                f"{question.get('question_text', '')}**"
-            )
-
-            option_values = {
-                "A": question.get("option_a", ""),
-                "B": question.get("option_b", ""),
-                "C": question.get("option_c", ""),
-                "D": question.get("option_d", ""),
-            }
-
-            option_labels = [
-                f"{letter}. {value}"
-                for letter, value in option_values.items()
-                if value
-            ]
-
-            selected = st.radio(
-                "Choose your answer",
-                options=option_labels,
-                index=None,
-                key=f"quiz_{QUIZ_ID}_question_{question_id}",
-            )
-
-            if selected:
-                selected_option = selected.split(".", 1)[0].strip()
-
-                submitted_answers.append({
-                    "question_id": question_id,
-                    "selected_option": selected_option,
-                })
-
-            st.caption(
-                f"Points: {question.get('points', 1)}"
-            )
-
-            st.divider()
-
-        submit_button = st.form_submit_button(
-            "🚀 Submit Quiz",
-            use_container_width=True,
+        selected_topic_id = st.selectbox(
+            "Select topic",
+            options=list(topic_labels.keys()),
+            format_func=lambda topic_id: topic_labels[topic_id],
+            key="assessment_topic_id",
         )
 
-    if submit_button:
+        # ----------------------------------------------------
+        # LOAD AVAILABLE QUIZZES
+        # ----------------------------------------------------
 
-        if len(submitted_answers) != len(quiz_questions):
-            st.warning(
-                "Please answer every question before submitting."
+        quizzes_response = api_get(
+            f"/quizzes/topic/{selected_topic_id}"
+        )
+
+        available_quizzes = normalize_list_response(
+            quizzes_response,
+            "quizzes",
+        )
+
+        if quizzes_response is None:
+
+            st.warning("Unable to load quizzes for this topic.")
+
+        elif not available_quizzes:
+
+            st.info(
+                f"No quiz exists for "
+                f"{TOPIC_NAMES.get(selected_topic_id, 'this topic')} yet. "
+                "A quiz with questions must be created before assessment."
             )
 
         else:
-            with st.spinner(
-                "Grading answers and running adaptive workflow..."
-            ):
-                result = submit_quiz(
-                    QUIZ_ID,
-                    submitted_answers,
+
+            available_quizzes = [
+                quiz
+                for quiz in available_quizzes
+                if isinstance(quiz, dict)
+                and quiz.get("quiz_id") is not None
+            ]
+
+            quiz_labels = {}
+
+            for quiz in available_quizzes:
+
+                quiz_id = quiz["quiz_id"]
+                quiz_title = quiz.get("title") or f"Quiz {quiz_id}"
+                question_count = quiz.get("question_count", 0)
+
+                quiz_labels[quiz_id] = (
+                    f"{quiz_title} (ID {quiz_id}, "
+                    f"{question_count} questions)"
                 )
 
-            if result is not None:
-                st.session_state.quiz_result = result
-                st.success(
-                    "Quiz submitted and evaluated successfully."
+            if not quiz_labels:
+
+                st.info(
+                    "The API did not return any valid quiz IDs."
                 )
-                st.rerun()
+
+            else:
+
+                selected_quiz_id = st.selectbox(
+                    "Select quiz",
+                    options=list(quiz_labels.keys()),
+                    format_func=lambda quiz_id: quiz_labels[quiz_id],
+                    key=f"assessment_quiz_id_{selected_topic_id}",
+                )
+
+                # --------------------------------------------
+                # LOAD QUIZ QUESTIONS
+                # --------------------------------------------
+
+                questions_response = get_quiz_questions(
+                    selected_quiz_id
+                )
+
+                quiz_questions = normalize_list_response(
+                    questions_response,
+                    "questions",
+                )
+
+                if questions_response is None:
+
+                    st.warning(
+                        "Unable to load questions for this quiz."
+                    )
+
+                elif not quiz_questions:
+
+                    st.info(
+                        "This quiz has no questions yet. "
+                        "Questions must be added before it can be attempted."
+                    )
+
+                else:
+
+                    with st.form(
+                        key=f"quiz_form_{selected_quiz_id}"
+                    ):
+
+                        st.caption(
+                            f"Topic: "
+                            f"{TOPIC_NAMES.get(selected_topic_id, 'Topic')} | "
+                            f"Quiz ID: {selected_quiz_id} | "
+                            f"Questions: {len(quiz_questions)}"
+                        )
+
+                        submitted_answers = []
+
+                        for index, question in enumerate(
+                            quiz_questions,
+                            start=1,
+                        ):
+
+                            question_id = question.get("question_id")
+
+                            st.markdown(
+                                f"**Q{index}. "
+                                f"{question.get('question_text', '')}**"
+                            )
+
+                            option_values = {
+                                "A": question.get("option_a", ""),
+                                "B": question.get("option_b", ""),
+                                "C": question.get("option_c", ""),
+                                "D": question.get("option_d", ""),
+                            }
+
+                            option_labels = [
+                                f"{letter}. {value}"
+                                for letter, value in option_values.items()
+                                if value
+                            ]
+
+                            if not option_labels:
+
+                                st.warning(
+                                    f"Question {index} has no answer options."
+                                )
+
+                                continue
+
+                            selected = st.radio(
+                                "Choose your answer",
+                                options=option_labels,
+                                index=None,
+                                key=(
+                                    f"quiz_{selected_quiz_id}_"
+                                    f"question_{question_id}"
+                                ),
+                            )
+
+                            if selected:
+
+                                submitted_answers.append({
+                                    "question_id": question_id,
+                                    "selected_option": (
+                                        selected.split(".", 1)[0].strip()
+                                    ),
+                                })
+
+                            st.caption(
+                                f"Points: {question.get('points', 1)}"
+                            )
+
+                            st.divider()
+
+                        submit_button = st.form_submit_button(
+                            "🚀 Submit Quiz",
+                            use_container_width=True,
+                        )
+
+                    # ----------------------------------------
+                    # SUBMIT QUIZ
+                    # ----------------------------------------
+
+                    if submit_button:
+
+                        if len(submitted_answers) != len(quiz_questions):
+
+                            st.warning(
+                                "Please answer every question before submitting."
+                            )
+
+                        else:
+
+                            with st.spinner(
+                                "Grading answers and running adaptive workflow..."
+                            ):
+
+                                result = submit_quiz(
+                                    selected_quiz_id,
+                                    submitted_answers,
+                                )
+
+                            if result is not None:
+
+                                st.session_state.quiz_result = result
+
+                                st.success(
+                                    "Quiz submitted and evaluated successfully."
+                                )
+
+                                st.rerun()
 
 
 # ============================================================
@@ -462,6 +925,7 @@ if result:
     result_col1, result_col2, result_col3 = st.columns(3)
 
     with result_col1:
+
         st.metric(
             "Score",
             f"{result.get('score', 0)}%",
@@ -470,6 +934,7 @@ if result:
     evaluation = result.get("evaluation") or {}
 
     with result_col2:
+
         st.metric(
             "Performance Level",
             evaluation.get(
@@ -479,6 +944,7 @@ if result:
         )
 
     with result_col3:
+
         recommended_action = evaluation.get(
             "recommended_action",
             "Not available",
@@ -503,19 +969,26 @@ if result:
     ):
 
         if answer.get("is_correct"):
+
             st.success(
                 f"Question {index}: Correct "
                 f"(+{answer.get('points_awarded', 0)} points)"
             )
+
         else:
-            st.error(f"Question {index}: Incorrect")
+
+            st.error(
+                f"Question {index}: Incorrect"
+            )
 
         st.write(
-            f"Your answer: {answer.get('selected_option', 'N/A')}"
+            f"Your answer: "
+            f"{answer.get('selected_option', 'N/A')}"
         )
 
         st.write(
-            f"Correct answer: {answer.get('correct_option', 'N/A')}"
+            f"Correct answer: "
+            f"{answer.get('correct_option', 'N/A')}"
         )
 
         if answer.get("explanation"):
@@ -529,10 +1002,13 @@ if result:
     )
 
     if workflow_status == "completed":
+
         st.success(
             f"Workflow status: {workflow_status.title()}"
         )
+
     else:
+
         st.warning(
             f"Workflow status: {workflow_status}"
         )
@@ -541,13 +1017,16 @@ if result:
         st.info(result["user_feedback"])
 
     if result.get("validation"):
+
         st.write("**Plan validation:**")
         st.json(result["validation"])
 
     workflow_errors = result.get("errors", [])
 
     if workflow_errors:
+
         st.warning("Workflow messages:")
+
         for error in workflow_errors:
             st.write(f"- {error}")
 
@@ -589,14 +1068,10 @@ else:
     st.success(f"Active Plan: Plan #{plan_id}")
 
     if active_plan.get("start_date"):
-        st.write(
-            f"**Start Date:** {active_plan['start_date']}"
-        )
+        st.write(f"**Start Date:** {active_plan['start_date']}")
 
     if active_plan.get("end_date"):
-        st.write(
-            f"**End Date:** {active_plan['end_date']}"
-        )
+        st.write(f"**End Date:** {active_plan['end_date']}")
 
     st.write(
         f"**Status:** "
@@ -613,9 +1088,7 @@ else:
 
     if not plan_items:
 
-        st.info(
-            "No study sessions were found for this plan."
-        )
+        st.info("No study sessions were found for this plan.")
 
     else:
 
@@ -637,11 +1110,15 @@ else:
             )
 
             if scheduled_date and scheduled_date != "Not scheduled":
+
                 try:
+
                     parsed_date = datetime.fromisoformat(
                         scheduled_date.replace("Z", "+00:00")
                     )
+
                     scheduled_date = parsed_date.strftime("%d %b %Y")
+
                 except (ValueError, TypeError):
                     pass
 
@@ -650,8 +1127,10 @@ else:
 
             if priority_value >= 5:
                 priority_label = "High"
+
             elif priority_value >= 3:
                 priority_label = "Medium"
+
             else:
                 priority_label = "Low"
 
@@ -693,6 +1172,7 @@ else:
                 status_col, button_col = st.columns([3, 1])
 
                 with status_col:
+
                     new_status = st.selectbox(
                         "Update session status",
                         options=status_options,
@@ -704,6 +1184,7 @@ else:
                     )
 
                 with button_col:
+
                     st.write("")
                     st.write("")
 
@@ -719,10 +1200,12 @@ else:
                         )
 
                         if updated is not None:
+
                             st.success(
                                 f"{topic_name} updated to "
                                 f"{new_status.replace('_', ' ')}."
                             )
+
                             st.rerun()
 
 
@@ -750,9 +1233,7 @@ else:
     })
 
     if not resource_topic_ids:
-        st.info(
-            "No topics are available for resource retrieval."
-        )
+        st.info("No topics are available for resource retrieval.")
 
     for topic_id in resource_topic_ids:
 
@@ -778,6 +1259,7 @@ else:
                 st.warning(
                     "Unable to load resources for this topic."
                 )
+
                 continue
 
             if not resources:
@@ -785,10 +1267,9 @@ else:
                 st.info(
                     f"No learning resources found for {topic_name}."
                 )
+
                 continue
 
-            # Deduplicate resources by their actual file path.
-            # Different database IDs can still point to the same PDF.
             unique_resources = []
             seen_paths = set()
             seen_resource_ids = set()
@@ -796,16 +1277,20 @@ else:
             for resource in resources:
 
                 resolved_path = resolve_resource_path(resource)
-
                 resource_id = resource.get("resource_id")
 
                 if resolved_path:
+
                     deduplication_key = os.path.normcase(
                         os.path.normpath(resolved_path)
                     )
+
                 elif resource_id is not None:
+
                     deduplication_key = f"resource_id:{resource_id}"
+
                 else:
+
                     deduplication_key = (
                         f"title:{resource.get('title', '')}"
                     )
@@ -842,27 +1327,33 @@ else:
                     st.write(resource["description"])
 
                 if resource.get("section_title"):
+
                     st.caption(
                         f"Section: {resource['section_title']}"
                     )
 
+                raw_resource_path = (
+                    resource.get("content_path")
+                    or resource.get("file_path")
+                    or resource.get("path")
+                    or ""
+                )
+
                 resolved_path = resolve_resource_path(resource)
 
-                if resolved_path:
+                if raw_resource_path:
 
-                    display_path = resource.get(
-                        "content_path",
-                        resource.get(
-                            "file_path",
-                            resource.get("path", resolved_path),
-                        ),
-                    )
+                    if not resolved_path:
 
-                    st.caption(f"File: {display_path}")
+                        st.warning(
+                            "This resource file is unavailable "
+                            "or its path is not permitted."
+                        )
 
-                    if os.path.isfile(resolved_path):
+                    elif os.path.isfile(resolved_path):
 
                         try:
+
                             with open(resolved_path, "rb") as pdf_file:
                                 pdf_data = pdf_file.read()
 
@@ -877,27 +1368,38 @@ else:
                                 ),
                             )
 
-                        except OSError as error:
+                        except OSError:
+
                             st.error(
-                                f"Could not read the PDF: {error}"
+                                "Unable to read this study material."
                             )
 
                     else:
+
                         st.warning(
-                            "PDF file not found at the resolved path: "
-                            f"{resolved_path}"
+                            "The requested study material is currently unavailable."
                         )
 
                 elif resource.get("url"):
 
-                    st.markdown(
-                        f"[Open Resource]({resource['url']})"
-                    )
+                    resource_url = resource.get("url")
+
+                    if is_safe_external_url(resource_url):
+
+                        st.markdown(
+                            f"[Open Resource]({resource_url})"
+                        )
+
+                    else:
+
+                        st.warning(
+                            "This resource link is invalid or not permitted."
+                        )
 
                 else:
 
-                    st.warning(
-                        "This resource has no file path or URL."
+                    st.info(
+                        "No downloadable file or external link is available."
                     )
 
                 st.divider()
@@ -908,6 +1410,7 @@ else:
 # ============================================================
 
 st.divider()
+
 st.subheader("🤖 How Your Plan Adapts")
 
 st.info(
@@ -928,6 +1431,7 @@ Quiz results are stored in MySQL and used by the adaptive workflow to evaluate p
 # ============================================================
 
 st.divider()
+
 st.subheader("🔄 Adaptive Learning Status")
 
 active_plan_id = dashboard.get("active_plan_id")
@@ -935,17 +1439,18 @@ active_plan_id = dashboard.get("active_plan_id")
 if active_plan_id is None and active_plan:
     active_plan_id = active_plan.get("plan_id")
 
+
 status_col1, status_col2, status_col3 = st.columns(3)
 
 with status_col1:
+
     st.metric(
         "Active Plan",
-        f"Plan #{active_plan_id}"
-        if active_plan_id
-        else "None",
+        f"Plan #{active_plan_id}" if active_plan_id else "None",
     )
 
 with status_col2:
+
     st.metric(
         "Active Plan: Pending",
         dashboard.get(
@@ -955,6 +1460,7 @@ with status_col2:
     )
 
 with status_col3:
+
     st.metric(
         "Active Plan: Completed",
         dashboard.get(
@@ -963,11 +1469,13 @@ with status_col3:
         ),
     )
 
+
 st.markdown("### 📈 Overall Learning Progress")
 
 overall_col1, overall_col2, overall_col3 = st.columns(3)
 
 with overall_col1:
+
     st.metric(
         "All Completed Sessions",
         dashboard.get(
@@ -977,6 +1485,7 @@ with overall_col1:
     )
 
 with overall_col2:
+
     st.metric(
         "All Pending Sessions",
         dashboard.get(
@@ -986,6 +1495,7 @@ with overall_col2:
     )
 
 with overall_col3:
+
     st.metric(
         "All In-Progress Sessions",
         dashboard.get(
@@ -1008,5 +1518,6 @@ if st.button(
     "🔄 Refresh Dashboard",
     use_container_width=True,
 ):
+
     st.session_state.quiz_result = None
     st.rerun()

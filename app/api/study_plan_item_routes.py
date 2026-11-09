@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -16,6 +15,7 @@ from app.schemas.study_plan_item_schema import (
     StudyPlanItemResponse,
     StudyPlanItemStatusUpdate,
 )
+
 
 router = APIRouter(
     prefix="/study-plan-items",
@@ -63,6 +63,28 @@ def get_owned_plan(
     return plan
 
 
+def get_owned_topic(
+    topic_id: int,
+    student_id: int,
+    db: Session,
+):
+    """Return a topic only if its parent subject belongs to the student."""
+    topic = (
+        db.query(Topic)
+        .join(
+            Subject,
+            Topic.subject_id == Subject.subject_id,
+        )
+        .filter(
+            Topic.topic_id == topic_id,
+            Subject.student_id == student_id,
+        )
+        .first()
+    )
+
+    return topic
+
+
 @router.post("/", response_model=StudyPlanItemResponse)
 def create_study_plan_item(
     item: StudyPlanItemCreate,
@@ -70,6 +92,7 @@ def create_study_plan_item(
     current_student: Student = Depends(get_current_student),
 ):
     """Create an item only in the authenticated student's plan."""
+
     plan = get_owned_plan(
         item.plan_id,
         current_student.student_id,
@@ -82,14 +105,10 @@ def create_study_plan_item(
             detail="Cannot add items to an inactive study plan",
         )
 
-    topic = (
-        db.query(Topic)
-        .join(Subject, Topic.subject_id == Subject.subject_id)
-        .filter(
-            Topic.topic_id == item.topic_id,
-            Subject.student_id == current_student.student_id,
-        )
-        .first()
+    topic = get_owned_topic(
+        item.topic_id,
+        current_student.student_id,
+        db,
     )
 
     if topic is None:
@@ -115,7 +134,7 @@ def create_study_plan_item(
 
     new_item = StudyPlanItem(
         plan_id=plan.plan_id,
-        topic_id=item.topic_id,
+        topic_id=topic.topic_id,
         scheduled_date=item.scheduled_date,
         duration_minutes=item.duration_minutes,
         priority=item.priority,
@@ -127,6 +146,7 @@ def create_study_plan_item(
         db.commit()
         db.refresh(new_item)
         return new_item
+
     except Exception:
         db.rollback()
         raise
@@ -141,7 +161,13 @@ def get_plan_items(
     db: Session = Depends(get_db),
     current_student: Student = Depends(get_current_student),
 ):
-    """Return items only for the authenticated student's plan."""
+    """
+    Return only items belonging to the authenticated student's plan
+    and linked to topics owned by that same student.
+
+    Historical items with invalid topic ownership are excluded.
+    """
+
     plan = get_owned_plan(
         plan_id,
         current_student.student_id,
@@ -150,7 +176,18 @@ def get_plan_items(
 
     return (
         db.query(StudyPlanItem)
-        .filter(StudyPlanItem.plan_id == plan.plan_id)
+        .join(
+            Topic,
+            StudyPlanItem.topic_id == Topic.topic_id,
+        )
+        .join(
+            Subject,
+            Topic.subject_id == Subject.subject_id,
+        )
+        .filter(
+            StudyPlanItem.plan_id == plan.plan_id,
+            Subject.student_id == current_student.student_id,
+        )
         .order_by(
             StudyPlanItem.scheduled_date,
             StudyPlanItem.item_id,
@@ -169,16 +206,31 @@ def update_item_status(
     db: Session = Depends(get_db),
     current_student: Student = Depends(get_current_student),
 ):
-    """Update an item only if its plan belongs to this student."""
+    """
+    Update an item only if:
+    1. Its study plan belongs to the authenticated student.
+    2. Its topic belongs to the authenticated student.
+    3. Its study plan is active.
+    """
+
     item = (
         db.query(StudyPlanItem)
         .join(
             StudyPlan,
             StudyPlanItem.plan_id == StudyPlan.plan_id,
         )
+        .join(
+            Topic,
+            StudyPlanItem.topic_id == Topic.topic_id,
+        )
+        .join(
+            Subject,
+            Topic.subject_id == Subject.subject_id,
+        )
         .filter(
             StudyPlanItem.item_id == item_id,
             StudyPlan.student_id == current_student.student_id,
+            Subject.student_id == current_student.student_id,
         )
         .first()
     )
@@ -221,6 +273,7 @@ def update_item_status(
         db.commit()
         db.refresh(item)
         return item
+
     except Exception:
         db.rollback()
         raise

@@ -5,10 +5,8 @@ from sqlalchemy.orm import Session
 from app.database.connection import SessionLocal
 from app.database.models import Student, Subject, Topic
 from app.api.dependencies import get_current_student
-from app.schemas.topic_schema import (
-    TopicCreate,
-    TopicResponse,
-)
+from app.schemas.topic_schema import TopicCreate, TopicResponse
+
 
 router = APIRouter(
     prefix="/topics",
@@ -24,7 +22,7 @@ def get_db():
         db.close()
 
 
-@router.post("/", response_model=TopicResponse)
+@router.post("/", response_model=TopicResponse, status_code=201)
 def create_topic(
     topic: TopicCreate,
     db: Session = Depends(get_db),
@@ -68,10 +66,29 @@ def create_topic(
         prerequisite_topic_id=topic.prerequisite_topic_id,
     )
 
-    db.add(new_topic)
-    db.commit()
-    db.refresh(new_topic)
+    try:
+        db.add(new_topic)
+        db.commit()
+        db.refresh(new_topic)
+    except Exception:
+        db.rollback()
+        raise
+
     return new_topic
+
+
+@router.get("/", response_model=list[TopicResponse])
+def get_my_topics(
+    db: Session = Depends(get_db),
+    current_student: Student = Depends(get_current_student),
+):
+    return (
+        db.query(Topic)
+        .join(Subject, Topic.subject_id == Subject.subject_id)
+        .filter(Subject.student_id == current_student.student_id)
+        .order_by(Topic.topic_id.asc())
+        .all()
+    )
 
 
 @router.get(
@@ -85,7 +102,10 @@ def get_subject_topics(
 ):
     subject = (
         db.query(Subject)
-        .filter(Subject.subject_id == subject_id)
+        .filter(
+            Subject.subject_id == subject_id,
+            Subject.student_id == current_student.student_id,
+        )
         .first()
     )
 
@@ -95,7 +115,6 @@ def get_subject_topics(
             detail="Subject not found.",
         )
 
-    # Shared topics are allowed to be read; the subject must exist.
     return (
         db.query(Topic)
         .filter(Topic.subject_id == subject_id)

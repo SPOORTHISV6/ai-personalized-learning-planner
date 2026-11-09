@@ -1,5 +1,6 @@
-
 from fastapi import APIRouter, Depends, HTTPException, status
+from pwdlib.exceptions import UnknownHashError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.security import (
@@ -44,7 +45,7 @@ def register_student(
         )
 
     student = Student(
-        name=request.name.strip(),
+        name=request.name,
         email=str(request.email),
         password_hash=hash_password(request.password),
         daily_available_hours=request.daily_available_hours,
@@ -55,6 +56,15 @@ def register_student(
         db.add(student)
         db.commit()
         db.refresh(student)
+
+    except IntegrityError:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists.",
+        )
+
     except Exception:
         db.rollback()
         raise
@@ -75,14 +85,24 @@ def login_student(
 
     # Existing students with NULL password_hash must first complete
     # a secure password setup process.
-    if (
-        student is None
-        or not student.password_hash
-        or not verify_password(
+    if student is None or not student.password_hash:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    try:
+        password_valid = verify_password(
             request.password,
             student.password_hash,
         )
-    ):
+
+    except UnknownHashError:
+        # Never expose stored password-hash details to the client.
+        password_valid = False
+
+    if not password_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",

@@ -27,3 +27,5 @@ Thumbs.db
 
 # Logs
 *.log
+
+.jwt_secret_local

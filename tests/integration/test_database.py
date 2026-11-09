@@ -8,14 +8,10 @@ from sqlalchemy.orm import sessionmaker
 from app.database.connection import Base
 from app.database import models  # Registers all ORM models
 
+from app.core.config import get_test_database_url
 
-# Intentionally fixed to the dedicated test database.
-# Never point integration tests at the application database.
-TEST_DATABASE_URL = (
-    "mysql+pymysql://root:root@localhost:3306/"
-    "ai_learning_planner_test"
-)
 
+# Integration tests must be explicitly enabled.
 if os.getenv("ALLOW_MYSQL_INTEGRATION_TESTS") != "1":
     raise RuntimeError(
         "Integration tests are disabled. Set "
@@ -23,14 +19,17 @@ if os.getenv("ALLOW_MYSQL_INTEGRATION_TESTS") != "1":
         "before running them."
     )
 
-if not TEST_DATABASE_URL.endswith("/ai_learning_planner_test"):
-    raise RuntimeError("Refusing to use a non-test database.")
+
+# This URL is independent of the application database URL.
+TEST_DATABASE_URL = get_test_database_url()
+
 
 test_engine = create_engine(
     TEST_DATABASE_URL,
     echo=False,
     pool_pre_ping=True,
 )
+
 
 TestSessionLocal = sessionmaker(
     bind=test_engine,
@@ -48,7 +47,8 @@ def verify_test_database():
 
     if database_name != "ai_learning_planner_test":
         raise RuntimeError(
-            f"Unsafe database target: {database_name!r}"
+            "Unsafe database target. Integration tests require "
+            "ai_learning_planner_test."
         )
 
 

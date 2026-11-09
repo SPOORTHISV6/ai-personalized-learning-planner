@@ -5,10 +5,8 @@ from sqlalchemy.orm import Session
 from app.database.connection import SessionLocal
 from app.database.models import Student, Subject
 from app.api.dependencies import get_current_student
-from app.schemas.subject_schema import (
-    SubjectCreate,
-    SubjectResponse,
-)
+from app.schemas.subject_schema import SubjectCreate, SubjectResponse
+
 
 router = APIRouter(
     prefix="/subjects",
@@ -24,7 +22,7 @@ def get_db():
         db.close()
 
 
-@router.post("/", response_model=SubjectResponse)
+@router.post("/", response_model=SubjectResponse, status_code=201)
 def create_subject(
     subject: SubjectCreate,
     db: Session = Depends(get_db),
@@ -43,9 +41,14 @@ def create_subject(
         importance=subject.importance,
     )
 
-    db.add(new_subject)
-    db.commit()
-    db.refresh(new_subject)
+    try:
+        db.add(new_subject)
+        db.commit()
+        db.refresh(new_subject)
+    except Exception:
+        db.rollback()
+        raise
+
     return new_subject
 
 
@@ -64,6 +67,19 @@ def get_student_subjects(
             detail="Student not found.",
         )
 
+    return (
+        db.query(Subject)
+        .filter(Subject.student_id == current_student.student_id)
+        .order_by(Subject.subject_id.asc())
+        .all()
+    )
+
+
+@router.get("/", response_model=list[SubjectResponse])
+def get_my_subjects(
+    db: Session = Depends(get_db),
+    current_student: Student = Depends(get_current_student),
+):
     return (
         db.query(Subject)
         .filter(Subject.student_id == current_student.student_id)
