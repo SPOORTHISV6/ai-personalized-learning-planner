@@ -29,3 +29,6 @@ Thumbs.db
 *.log
 
 .jwt_secret_local
+
+# Personal photos
+/photo/
