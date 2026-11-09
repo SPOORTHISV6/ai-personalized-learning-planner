@@ -32,3 +32,6 @@ Thumbs.db
 
 # Personal photos
 /photo/
+
+# Database backups
+/backups/
