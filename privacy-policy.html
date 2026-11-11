@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Privacy policy for the AI Personalized Learning and Study Planner project.">
+<title>Privacy Policy | AI Personalized Learning &amp; Study Planner</title>
+<style>
+:root{color-scheme:light;--ink:#172033;--muted:#586579;--brand:#3157c8}
+*{box-sizing:border-box}body{margin:0;font:16px/1.7 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);background:#f4f7fc}
+.wrap{width:min(860px,calc(100% - 40px));margin:auto}header,footer{background:white;border-bottom:1px solid #e5eaf2}
+nav{padding:20px 0}a{color:var(--brand)}main{background:white;margin:34px auto;padding:clamp(24px,5vw,48px);border:1px solid #e5eaf2;border-radius:14px}
+h1{line-height:1.15}h2{margin-top:30px;font-size:1.25rem}p,li{color:#354156}.muted{color:var(--muted)}footer{border-top:1px solid #e5eaf2;border-bottom:0;padding:22px 0;color:var(--muted)}
+</style></head><body>
+<header><div class="wrap"><nav><a href="index.html">← Project homepage</a></nav></div></header>
+<main class="wrap"><h1>Privacy Policy</h1>
+<p class="muted"><strong>Effective date:</strong> 11 November 2026</p>
+<p>This policy explains how the AI Personalized Learning &amp; Study Planner project and its database backup utility handle information. This is a software development project. This policy must be reviewed and updated if the project is opened to additional users or its data practices change.</p>
+<h2>1. Information handled</h2>
+<p>Depending on features used, the application database may contain information entered into the learning planner, such as student profile details, subjects, topics, study plans, learning resources, quiz responses, and performance records.</p>
+<p>The backup utility creates SQL dump files from the configured MySQL database. Those files may contain records stored in that database. Operators are responsible for ensuring they have authority to process and back up the information in their database.</p>
+<h2>2. Google Drive access</h2>
+<p>The backup utility can connect to Google Drive using Google's OAuth authorization. It requests the <code>https://www.googleapis.com/auth/drive.file</code> scope. This scope allows the application to create and manage files it creates or files the user specifically makes available to it; it does not request general access to all files in the user's Drive.</p>
+<p>When cloud backup is enabled, database backup files are uploaded to the configured Google Drive backup folder. The utility may list, inspect, download, and move its backup files to Google Drive trash as part of backup management and retention.</p>
+<h2>3. OAuth credentials and tokens</h2>
+<p>In the current project configuration, OAuth client credentials are stored in the project's secrets directory and the user token is stored in a local token file. These files must remain private, be excluded from public source control, and be protected with appropriate operating-system permissions.</p>
+<p>Never publish OAuth client secrets, access tokens, refresh tokens, database passwords, or backup files in the public repository. Google Drive access can be revoked through the Google Account security settings or connected-app permissions.</p>
+<h2>4. How information is used</h2>
+<p>Database contents are used by the learning planner features. Backup files are used to preserve and restore the configured database. Google Drive is used as the cloud storage destination when the operator enables cloud backups.</p>
+<p>This policy describes the intended functions of the project. It must be updated if analytics, advertising, additional integrations, or other data processing are introduced.</p>
+<h2>5. Storage and retention</h2>
+<p>Local SQL backups are stored in the configured local backup directory. Cloud backups are stored in the configured Google Drive folder. The current cloud retention workflow is configured to retain backups across up to seven distinct backup dates and may move older matching backup files to Google Drive trash. Actual retention depends on the running configuration and successful execution of the workflow.</p>
+<p>Google Drive storage is also subject to Google's terms, privacy policy, and account settings. The project maintainer does not control Google's infrastructure or retention of items after they are moved to trash.</p>
+<h2>6. Sharing and third parties</h2>
+<p>The backup utility sends backup files to Google Drive when cloud backup is enabled. Google processes those files to provide its storage and API services. The project does not intentionally sell database contents or share them with advertising providers. Do not use the application with personal or sensitive information unless you have authority and appropriate safeguards.</p>
+<h2>7. Security</h2>
+<p>The project uses OAuth for Google Drive authorization and validates downloaded backup files using file size, SHA-256 checksums, and SQL backup validation. These measures help detect certain integrity problems but do not guarantee absolute security. Operators should restrict access to the computer, repository, database, OAuth files, and Google Drive folder, and maintain independent recovery copies where appropriate.</p>
+<h2>8. Data deletion and revoking access</h2>
+<p>Operators can delete local backup files and delete or move cloud backup files to Google Drive trash using the relevant storage controls. Operators can revoke application access from Google Account security settings. Deleting a backup does not automatically delete corresponding records from the live MySQL database, and deleting database records does not automatically remove existing backup copies.</p>
+<h2>9. Children's information</h2>
+<p>This project is not presented here as a service directed to children. If adapted for minors or schools, the operator must assess and meet applicable consent, notice, and data-protection requirements before collecting or processing their information.</p>
+<h2>10. Changes</h2>
+<p>This policy may be updated when project functionality or data practices change. The effective date at the top of this page will be revised when material changes are made.</p>
+<h2>11. Contact</h2><p>
+  <strong>Contact email:</strong>
+  <a href="mailto:svspoorthi7@gmail.com">
+    svspoorthi7@gmail.com
+  </a>
+</p>
+<p>For privacy questions, contact the project maintainer:
+</main><footer><div class="wrap"><a href="index.html">Project homepage</a></div></footer>
+</body></html>
