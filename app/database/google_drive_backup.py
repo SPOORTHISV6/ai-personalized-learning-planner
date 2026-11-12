@@ -2,6 +2,14 @@
 import hashlib
 import logging
 import re
+import os
+import time
+import socket
+import ssl
+import http.client
+import json
+
+import httplib2
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
@@ -11,6 +19,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
 
@@ -38,6 +47,151 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
+# GOOGLE DRIVE TRANSIENT-ERROR RETRY
+# ============================================================
+
+MAX_RETRY_ATTEMPTS = 4
+RETRY_BASE_DELAY_SECONDS = 2
+
+RETRYABLE_HTTP_STATUS_CODES = {
+    408, 429, 500, 502, 503, 504
+}
+
+RETRYABLE_GOOGLE_API_REASONS = {
+    "rateLimitExceeded",
+    "userRateLimitExceeded",
+    "backendError",
+}
+
+
+def _is_retryable_http_error(error: HttpError) -> bool:
+    """Return True only for HTTP failures that may be temporary."""
+
+    status = getattr(
+        getattr(error, "resp", None),
+        "status",
+        None
+    )
+
+    if status in RETRYABLE_HTTP_STATUS_CODES:
+        return True
+
+    # Google sometimes reports rate limiting as HTTP 403.
+    if status == 403:
+        try:
+            payload = json.loads(
+                error.content.decode("utf-8")
+            )
+
+            reasons = {
+                item.get("reason")
+                for item in payload.get(
+                    "error", {}
+                ).get("errors", [])
+            }
+
+            return bool(
+                reasons & RETRYABLE_GOOGLE_API_REASONS
+            )
+
+        except (
+            AttributeError,
+            UnicodeDecodeError,
+            json.JSONDecodeError
+        ):
+            return False
+
+    return False
+
+
+def execute_with_retry(
+    request,
+    operation_name: str = "Google Drive API request",
+    max_attempts: int = MAX_RETRY_ATTEMPTS,
+):
+    """
+    Execute a safe/repeatable Drive request with exponential backoff.
+
+    Delays:
+    Attempt 1 -> immediate
+    Attempt 2 -> 2 seconds
+    Attempt 3 -> 4 seconds
+    Attempt 4 -> 8 seconds
+
+    Use only for read-only requests and idempotent updates.
+
+    Do not use for folder creation or SQL uploads because a timeout
+    can occur after Google has already processed those operations.
+    """
+
+    if (
+        not isinstance(max_attempts, int)
+        or isinstance(max_attempts, bool)
+        or max_attempts < 1
+    ):
+        raise ValueError(
+            "max_attempts must be a positive integer."
+        )
+
+    retryable_network_errors = (
+        TimeoutError,
+        socket.timeout,
+        ConnectionError,
+        httplib2.HttpLib2Error,
+        ssl.SSLError,
+        http.client.IncompleteRead,
+    )
+
+    for attempt in range(1, max_attempts + 1):
+
+        try:
+            return request.execute()
+
+        except HttpError as exc:
+
+            if not _is_retryable_http_error(exc):
+                raise
+
+            error = exc
+
+        except retryable_network_errors as exc:
+
+            error = exc
+
+        if attempt == max_attempts:
+
+            logger.error(
+                "%s failed after %s attempts.",
+                operation_name,
+                max_attempts,
+                exc_info=(
+                    type(error),
+                    error,
+                    error.__traceback__
+                ),
+            )
+
+            raise error
+
+        delay = (
+            RETRY_BASE_DELAY_SECONDS
+            * (2 ** (attempt - 1))
+        )
+
+        logger.warning(
+            "%s failed on attempt %s/%s. "
+            "Retrying in %s seconds. Error: %s",
+            operation_name,
+            attempt,
+            max_attempts,
+            delay,
+            error
+        )
+
+        time.sleep(delay)
+
+
+# ============================================================
 # OAUTH TOKEN MANAGEMENT
 # ============================================================
 
@@ -56,6 +210,7 @@ def save_credentials(credentials):
     )
 
     try:
+
         temporary_token.write_text(
             credentials.to_json(),
             encoding="utf-8"
@@ -64,6 +219,7 @@ def save_credentials(credentials):
         temporary_token.replace(TOKEN_FILE)
 
     finally:
+
         temporary_token.unlink(missing_ok=True)
 
 
@@ -71,23 +227,179 @@ def save_credentials(credentials):
 # GOOGLE DRIVE AUTHENTICATION
 # ============================================================
 
-def authenticate_google_drive():
+def check_oauth_health() -> dict:
     """
-    Authenticate using OAuth installed-app flow.
+    Inspect Google OAuth token health without modifying credentials.
+
+    This function does not:
+    - Refresh access tokens.
+    - Open a browser.
+    - Make Google Drive API requests.
+    - Expose token values.
+    """
+
+    result = {
+        "status": "UNKNOWN",
+        "token_file_exists": TOKEN_FILE.exists(),
+        "refresh_token_present": False,
+        "access_token_valid": False,
+        "access_token_expired": False,
+        "expiry_utc": None,
+        "seconds_until_expiry": None,
+        "message": "",
+    }
+
+    if not TOKEN_FILE.exists():
+
+        result.update({
+            "status": "TOKEN_MISSING",
+            "message": (
+                "OAuth token file does not exist. "
+                "Manual authentication required."
+            ),
+        })
+
+        logger.warning("OAuth health: TOKEN_MISSING")
+
+        return result
+
+    try:
+
+        credentials = Credentials.from_authorized_user_file(
+            str(TOKEN_FILE),
+            SCOPES
+        )
+
+    except (OSError, ValueError, TypeError):
+
+        result.update({
+            "status": "TOKEN_INVALID",
+            "message": (
+                "OAuth token file is malformed or unreadable."
+            ),
+        })
+
+        logger.exception("OAuth health: TOKEN_INVALID")
+
+        return result
+
+    result["refresh_token_present"] = bool(
+        credentials.refresh_token
+    )
+
+    expiry = credentials.expiry
+
+    if expiry is not None:
+
+        from datetime import timezone
+
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(
+                tzinfo=timezone.utc
+            )
+        else:
+            expiry = expiry.astimezone(
+                timezone.utc
+            )
+
+        now = datetime.now(timezone.utc)
+
+        seconds_remaining = (
+            expiry - now
+        ).total_seconds()
+
+        result["expiry_utc"] = expiry.isoformat()
+
+        result["seconds_until_expiry"] = int(
+            seconds_remaining
+        )
+
+    result["access_token_valid"] = bool(
+        credentials.valid
+    )
+
+    result["access_token_expired"] = bool(
+        credentials.expired
+    )
+
+    if credentials.valid:
+
+        result.update({
+            "status": "HEALTHY",
+            "message": (
+                "OAuth access token is currently valid."
+            ),
+        })
+
+    elif (
+        credentials.expired
+        and credentials.refresh_token
+    ):
+
+        result.update({
+            "status": "REFRESH_REQUIRED",
+            "message": (
+                "Access token has expired. "
+                "A refresh token is available."
+            ),
+        })
+
+    elif not credentials.refresh_token:
+
+        result.update({
+            "status": "REAUTH_REQUIRED",
+            "message": (
+                "Refresh token is unavailable. "
+                "Manual authentication is required."
+            ),
+        })
+
+    else:
+
+        result.update({
+            "status": "INVALID_CREDENTIALS",
+            "message": (
+                "OAuth credentials are not currently valid. "
+                "Authentication needs investigation."
+            ),
+        })
+
+    logger.info(
+        "OAuth health: %s | Refresh token: %s | "
+        "Access token valid: %s | Expired: %s",
+        result["status"],
+        result["refresh_token_present"],
+        result["access_token_valid"],
+        result["access_token_expired"],
+    )
+
+    return result
+
+
+def authenticate_google_drive(allow_browser_auth=None):
+    """
+    Authenticate with Google Drive.
 
     Features:
     - Reuses existing OAuth credentials.
     - Refreshes expired access tokens.
-    - Persists refreshed credentials.
-    - Starts browser authentication if refresh is unavailable.
-    - Handles expired or revoked refresh tokens.
+    - Saves refreshed credentials.
+    - Supports manual browser authentication.
+    - Prevents browser authentication in scheduled mode.
     """
 
-    credentials = None
+    if allow_browser_auth is None:
 
-    # --------------------------------------------------------
-    # 1. Load existing credentials
-    # --------------------------------------------------------
+        browser_setting = os.getenv(
+            "AI_BACKUP_ALLOW_BROWSER_AUTH",
+            "1"
+        ).strip().lower()
+
+        allow_browser_auth = browser_setting not in {
+            "0", "false", "no", "off"
+        }
+
+    credentials = None
 
     if TOKEN_FILE.exists():
 
@@ -101,16 +413,19 @@ def authenticate_google_drive():
         except (OSError, ValueError):
 
             logger.warning(
-                "Existing OAuth token could not be loaded. "
-                "Fresh authentication will be required.",
+                "Existing OAuth token could not be loaded.",
                 exc_info=True
             )
 
-            credentials = None
+            if not allow_browser_auth:
 
-    # --------------------------------------------------------
-    # 2. Refresh expired access token
-    # --------------------------------------------------------
+                raise RuntimeError(
+                    "Scheduled Google Drive authentication failed: "
+                    "OAuth token is missing or invalid. "
+                    "Manual reauthentication is required."
+                )
+
+            credentials = None
 
     if (
         credentials
@@ -131,18 +446,29 @@ def authenticate_google_drive():
         except RefreshError:
 
             logger.warning(
-                "Google Drive refresh token is invalid or expired. "
-                "Fresh OAuth authentication is required.",
+                "Google Drive refresh token was rejected.",
                 exc_info=True
             )
 
+            if not allow_browser_auth:
+
+                raise RuntimeError(
+                    "Scheduled Google Drive authentication failed: "
+                    "refresh token is invalid, expired or revoked. "
+                    "Run manual Google Drive authentication."
+                )
+
             credentials = None
 
-    # --------------------------------------------------------
-    # 3. Start fresh authentication if necessary
-    # --------------------------------------------------------
-
     if not credentials or not credentials.valid:
+
+        if not allow_browser_auth:
+
+            raise RuntimeError(
+                "Scheduled Google Drive authentication failed: "
+                "valid OAuth credentials are unavailable. "
+                "Run manual Google Drive authentication."
+            )
 
         if not CREDENTIALS_FILE.exists():
 
@@ -169,10 +495,6 @@ def authenticate_google_drive():
         logger.info(
             "Fresh Google Drive authentication completed."
         )
-
-    # --------------------------------------------------------
-    # 4. Build Google Drive API service
-    # --------------------------------------------------------
 
     return build(
         "drive",
@@ -219,7 +541,9 @@ def validate_sql_backup(file_path: Path):
 
     from app.database.backup_manager import verify_backup
 
-    verification = verify_backup(Path(file_path))
+    verification = verify_backup(
+        Path(file_path)
+    )
 
     if verification is False:
 
@@ -262,13 +586,16 @@ def get_or_create_backup_folder(service) -> str:
 
     while True:
 
-        response = service.files().list(
-            q=query,
-            spaces="drive",
-            fields="nextPageToken, files(id, name)",
-            pageSize=100,
-            pageToken=page_token
-        ).execute()
+        response = execute_with_retry(
+            service.files().list(
+                q=query,
+                spaces="drive",
+                fields="nextPageToken, files(id, name)",
+                pageSize=100,
+                pageToken=page_token
+            ),
+            operation_name="Search Google Drive backup folder"
+        )
 
         folders.extend(
             response.get("files", [])
@@ -295,6 +622,8 @@ def get_or_create_backup_folder(service) -> str:
         "mimeType": "application/vnd.google-apps.folder"
     }
 
+    # Do not blindly retry folder creation. A timeout can occur
+    # after Google has already created the folder.
     folder = service.files().create(
         body=folder_metadata,
         fields="id"
@@ -342,16 +671,19 @@ def find_existing_backup(
 
     while True:
 
-        response = service.files().list(
-            q=query,
-            spaces="drive",
-            fields=(
-                "nextPageToken, "
-                "files(id, name, size, description, parents)"
+        response = execute_with_retry(
+            service.files().list(
+                q=query,
+                spaces="drive",
+                fields=(
+                    "nextPageToken, "
+                    "files(id, name, size, description, parents)"
+                ),
+                pageSize=100,
+                pageToken=page_token
             ),
-            pageSize=100,
-            pageToken=page_token
-        ).execute()
+            operation_name="Search for duplicate cloud backup"
+        )
 
         matching_files.extend(
             response.get("files", [])
@@ -417,28 +749,29 @@ def apply_cloud_retention(
 
     page_token = None
 
-    # --------------------------------------------------------
-    # 1. Retrieve all files using pagination
-    # --------------------------------------------------------
-
     while True:
 
-        response = service.files().list(
-            q=f"'{folder_id}' in parents and trashed=false",
-            spaces="drive",
-            fields=(
-                "nextPageToken, "
-                "files(id, name, size, description)"
+        response = execute_with_retry(
+            service.files().list(
+                q=f"'{folder_id}' in parents and trashed=false",
+                spaces="drive",
+                fields=(
+                    "nextPageToken, "
+                    "files(id, name, size, description)"
+                ),
+                pageSize=100,
+                pageToken=page_token
             ),
-            pageSize=100,
-            pageToken=page_token
-        ).execute()
+            operation_name="List cloud backups for retention"
+        )
 
         for cloud_file in response.get("files", []):
 
             file_name = cloud_file.get("name", "")
 
-            match = backup_pattern.fullmatch(file_name)
+            match = backup_pattern.fullmatch(
+                file_name
+            )
 
             if not match:
                 continue
@@ -473,10 +806,6 @@ def apply_cloud_retention(
         if not page_token:
             break
 
-    # --------------------------------------------------------
-    # 2. Identify latest distinct backup dates
-    # --------------------------------------------------------
-
     distinct_dates = sorted(
         {
             backup["date"]
@@ -489,10 +818,6 @@ def apply_cloud_retention(
         distinct_dates[:keep_dates]
     )
 
-    # --------------------------------------------------------
-    # 3. Move expired backups to trash
-    # --------------------------------------------------------
-
     trashed_count = 0
     retained_count = 0
 
@@ -504,11 +829,17 @@ def apply_cloud_retention(
 
             continue
 
-        service.files().update(
-            fileId=backup["id"],
-            body={"trashed": True},
-            fields="id,name,trashed"
-        ).execute()
+        # Setting trashed=True repeatedly is idempotent.
+        execute_with_retry(
+            service.files().update(
+                fileId=backup["id"],
+                body={"trashed": True},
+                fields="id,name,trashed"
+            ),
+            operation_name=(
+                f"Move expired backup to trash: {backup['name']}"
+            )
+        )
 
         logger.info(
             "Moved expired cloud backup to trash: %s",
@@ -516,10 +847,6 @@ def apply_cloud_retention(
         )
 
         trashed_count += 1
-
-    # --------------------------------------------------------
-    # 4. Return retention result
-    # --------------------------------------------------------
 
     result = {
         "total_backups": len(backups),
@@ -556,10 +883,6 @@ def upload_backup(file_path: Path) -> dict:
 
     file_path = Path(file_path).resolve()
 
-    # --------------------------------------------------------
-    # 1. Validate local backup file
-    # --------------------------------------------------------
-
     if not file_path.is_file():
 
         raise FileNotFoundError(
@@ -580,29 +903,19 @@ def upload_backup(file_path: Path) -> dict:
             "Cannot upload an empty backup."
         )
 
-    # --------------------------------------------------------
-    # 2. Validate SQL backup contents
-    # --------------------------------------------------------
+    verification = validate_sql_backup(
+        file_path
+    )
 
-    verification = validate_sql_backup(file_path)
-
-    # --------------------------------------------------------
-    # 3. Calculate SHA-256 checksum
-    # --------------------------------------------------------
-
-    checksum = calculate_sha256(file_path)
-
-    # --------------------------------------------------------
-    # 4. Authenticate and locate backup folder
-    # --------------------------------------------------------
+    checksum = calculate_sha256(
+        file_path
+    )
 
     service = authenticate_google_drive()
 
-    folder_id = get_or_create_backup_folder(service)
-
-    # --------------------------------------------------------
-    # 5. Check for duplicate backup
-    # --------------------------------------------------------
+    folder_id = get_or_create_backup_folder(
+        service
+    )
 
     existing_file = find_existing_backup(
         service,
@@ -655,10 +968,6 @@ def upload_backup(file_path: Path) -> dict:
             "The existing backup was not modified."
         )
 
-    # --------------------------------------------------------
-    # 6. Prepare upload metadata
-    # --------------------------------------------------------
-
     metadata = {
         "name": file_path.name,
         "parents": [folder_id],
@@ -673,12 +982,11 @@ def upload_backup(file_path: Path) -> dict:
 
     uploaded_file = None
 
-    # --------------------------------------------------------
-    # 7. Upload and verify
-    # --------------------------------------------------------
-
     try:
 
+        # Do not blindly retry uploads. A network timeout can occur
+        # after Google has accepted the file. Duplicate detection on
+        # the next run will identify a completed upload.
         uploaded_file = service.files().create(
             body=metadata,
             media_body=media,
@@ -719,11 +1027,17 @@ def upload_backup(file_path: Path) -> dict:
 
             try:
 
-                service.files().update(
-                    fileId=uploaded_file["id"],
-                    body={"trashed": True},
-                    fields="id,name,trashed"
-                ).execute()
+                execute_with_retry(
+                    service.files().update(
+                        fileId=uploaded_file["id"],
+                        body={"trashed": True},
+                        fields="id,name,trashed"
+                    ),
+                    operation_name=(
+                        f"Move unverified upload to trash: "
+                        f"{file_path.name}"
+                    )
+                )
 
                 logger.warning(
                     "Unverified uploaded backup moved to trash: %s",
@@ -749,10 +1063,6 @@ def upload_backup(file_path: Path) -> dict:
         file_path.name
     )
 
-    # --------------------------------------------------------
-    # 8. Apply cloud retention
-    # --------------------------------------------------------
-
     retention_result = apply_cloud_retention(
         service,
         folder_id,
@@ -763,10 +1073,6 @@ def upload_backup(file_path: Path) -> dict:
         "Cloud retention result: %s",
         retention_result
     )
-
-    # --------------------------------------------------------
-    # 9. Return complete backup result
-    # --------------------------------------------------------
 
     return {
         "file_id": uploaded_file["id"],
@@ -822,14 +1128,13 @@ def download_backup(
 
     service = authenticate_google_drive()
 
-    # --------------------------------------------------------
-    # 1. Retrieve cloud backup metadata
-    # --------------------------------------------------------
-
-    metadata = service.files().get(
-        fileId=file_id,
-        fields="id,name,size,description,mimeType"
-    ).execute()
+    metadata = execute_with_retry(
+        service.files().get(
+            fileId=file_id,
+            fields="id,name,size,description,mimeType"
+        ),
+        operation_name="Retrieve cloud backup metadata"
+    )
 
     if metadata.get("mimeType") == (
         "application/vnd.google-apps.folder"
@@ -856,10 +1161,6 @@ def download_backup(
         ""
     )
 
-    # --------------------------------------------------------
-    # 2. Extract and validate SHA-256 metadata
-    # --------------------------------------------------------
-
     checksum_match = re.search(
         r"(?:^|\s)SHA256:([0-9a-fA-F]{64})(?:$|\s)",
         description
@@ -872,10 +1173,6 @@ def download_backup(
         )
 
     expected_checksum = checksum_match.group(1).lower()
-
-    # --------------------------------------------------------
-    # 3. Prepare destination and temporary file
-    # --------------------------------------------------------
 
     destination.parent.mkdir(
         parents=True,
@@ -892,10 +1189,6 @@ def download_backup(
             fileId=file_id
         )
 
-        # ----------------------------------------------------
-        # 4. Download into temporary file
-        # ----------------------------------------------------
-
         with temporary_path.open("wb") as file:
 
             downloader = MediaIoBaseDownload(
@@ -909,10 +1202,6 @@ def download_backup(
 
                 _, done = downloader.next_chunk()
 
-        # ----------------------------------------------------
-        # 5. Verify downloaded file size
-        # ----------------------------------------------------
-
         actual_size = temporary_path.stat().st_size
 
         if actual_size != expected_size:
@@ -920,10 +1209,6 @@ def download_backup(
             raise RuntimeError(
                 "Downloaded backup size mismatch."
             )
-
-        # ----------------------------------------------------
-        # 6. Verify downloaded SHA-256 checksum
-        # ----------------------------------------------------
 
         actual_checksum = calculate_sha256(
             temporary_path
@@ -935,17 +1220,9 @@ def download_backup(
                 "Downloaded backup SHA-256 checksum mismatch."
             )
 
-        # ----------------------------------------------------
-        # 7. Validate downloaded SQL contents
-        # ----------------------------------------------------
-
         verification = validate_sql_backup(
             temporary_path
         )
-
-        # ----------------------------------------------------
-        # 8. Move verified backup to final destination
-        # ----------------------------------------------------
 
         if destination.exists():
 

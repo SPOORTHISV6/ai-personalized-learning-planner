@@ -479,13 +479,37 @@ def main():
         raise SystemExit(1)
 
     # ========================================================
-    # STEP 2: UPLOAD BACKUP TO GOOGLE DRIVE
+    # STEP 2: CHECK OAUTH HEALTH AND UPLOAD TO GOOGLE DRIVE
     # ========================================================
 
     try:
 
-        from app.database.google_drive_backup import upload_backup
+        from app.database.google_drive_backup import (
+            check_oauth_health,
+            upload_backup
+        )
 
+        # Inspect OAuth status without refreshing the token.
+        oauth_health = check_oauth_health()
+
+        print("\nGOOGLE DRIVE OAUTH HEALTH")
+        print("Status:", oauth_health["status"])
+        print(
+            "Refresh token present:",
+            oauth_health["refresh_token_present"]
+        )
+        print(
+            "Access token valid:",
+            oauth_health["access_token_valid"]
+        )
+        print("Message:", oauth_health["message"])
+
+        logging.info(
+            "OAuth health before cloud upload: %s",
+            oauth_health["status"]
+        )
+
+        # Continue with the existing upload operation.
         cloud_result = upload_backup(backup_path)
 
         logging.info(
