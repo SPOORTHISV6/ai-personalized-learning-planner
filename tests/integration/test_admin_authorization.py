@@ -403,6 +403,104 @@ class TestAdminAuthorization:
         assert response.status_code == 404
 
     # --------------------------------------------------------
+    # ADDITIONAL QUIZ OWNERSHIP TESTS
+    # --------------------------------------------------------
+
+    def test_student_cannot_access_another_students_quiz_questions(self):
+        quiz = self.create_quiz_directly(
+            topic_id=self.other_topic_id
+        )
+
+        question = QuizQuestion(
+            quiz_id=quiz.quiz_id,
+            question_text="What is SQL normalization?",
+            option_a="Organizing data",
+            option_b="Deleting data",
+            option_c="Duplicating data",
+            option_d="Encrypting data",
+            correct_option="A",
+            explanation="Normalization organizes relational data.",
+            points=1,
+        )
+
+        self.db.add(question)
+        self.db.commit()
+
+        self.authenticate_as(self.student)
+
+        response = self.client.get(
+            f"/quizzes/{quiz.quiz_id}/questions"
+        )
+
+        assert response.status_code == 404
+
+    def test_student_cannot_list_another_students_topic_quizzes(self):
+        self.authenticate_as(self.admin)
+
+        create_response = self.client.post(
+            "/quizzes/",
+            json={
+                "topic_id": self.other_topic_id,
+                "title": "Other Student Topic Quiz",
+                "difficulty": 2,
+            },
+        )
+
+        assert create_response.status_code == 201
+
+        self.authenticate_as(self.student)
+
+        response = self.client.get(
+            f"/quizzes/topic/{self.other_topic_id}"
+        )
+
+        assert response.status_code == 404
+
+    def test_student_can_access_own_quiz_and_questions(self):
+        quiz = self.create_quiz_directly()
+
+        question = QuizQuestion(
+            quiz_id=quiz.quiz_id,
+            question_text="What is normalization?",
+            option_a="Data organization",
+            option_b="Data deletion",
+            option_c="Data duplication",
+            option_d="Data encryption",
+            correct_option="A",
+            explanation="Normalization organizes relational data.",
+            points=1,
+        )
+
+        self.db.add(question)
+        self.db.commit()
+
+        self.authenticate_as(self.student)
+
+        # Verify own quiz access.
+        quiz_response = self.client.get(
+            f"/quizzes/{quiz.quiz_id}"
+        )
+
+        assert quiz_response.status_code == 200
+        assert quiz_response.json()["quiz_id"] == quiz.quiz_id
+        assert quiz_response.json()["question_count"] == 1
+
+        # Verify own question access.
+        question_response = self.client.get(
+            f"/quizzes/{quiz.quiz_id}/questions"
+        )
+
+        assert question_response.status_code == 200
+        assert len(question_response.json()) == 1
+
+        question_data = question_response.json()[0]
+
+        assert question_data["question_text"] == (
+            "What is normalization?"
+        )
+        assert "correct_option" not in question_data
+
+    # --------------------------------------------------------
     # RESOURCE AUTHORIZATION
     # --------------------------------------------------------
 

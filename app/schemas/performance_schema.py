@@ -6,9 +6,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class PerformanceCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     student_id: int = Field(gt=0)
     topic_id: int = Field(gt=0)
-    score: float = Field(ge=0, le=100, allow_inf_nan=False)
+    score: float = Field(
+        ge=0,
+        le=100,
+        allow_inf_nan=False,
+    )
 
 
 class PerformanceResponse(BaseModel):

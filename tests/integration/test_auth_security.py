@@ -331,6 +331,29 @@ def test_expired_jwt_is_rejected(auth_test_context):
 
     assert response.status_code == 401
 
+def test_future_issued_jwt_is_rejected(auth_test_context):
+    now = datetime.now(timezone.utc)
+
+    payload = {
+        "sub": str(auth_test_context["student_id"]),
+        "iat": now + timedelta(minutes=10),
+        "exp": now + timedelta(minutes=30),
+    }
+
+    future_token = jwt.encode(
+        payload,
+        auth_test_context["secret"],
+        algorithm=ALGORITHM,
+    )
+
+    response = auth_test_context["client"].get(
+        "/auth/me",
+        headers={
+            "Authorization": f"Bearer {future_token}"
+        },
+    )
+
+    assert response.status_code == 401
 
 def test_wrong_secret_jwt_is_rejected(auth_test_context):
     now = datetime.now(timezone.utc)

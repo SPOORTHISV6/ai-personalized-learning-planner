@@ -1,4 +1,4 @@
-import unittest
+﻿import unittest
 from unittest.mock import patch
 
 from app.agents.performance_rules import (
@@ -103,6 +103,304 @@ class TestStudyPlanAgentPerformance(unittest.TestCase):
         self.assertEqual(sessions[202]["duration_minutes"], 45)
 
         self.assertNotIn(203, sessions)
+
+    @patch(
+        "app.agents.study_plan_agent.get_owned_topic_ids",
+        return_value={
+            "topic_ids": {301, 302},
+            "topic_difficulties": {},
+            "topic_details": {
+                301: {
+                    "topic_name": "SQL Basics",
+                    "prerequisite_topic_id": None,
+                },
+                302: {
+                    "topic_name": "SQL Joins",
+                    "prerequisite_topic_id": 301,
+                },
+            },
+        },
+    )
+    def test_unassessed_prerequisite_is_scheduled_first(
+        self,
+        mock_owned_topics,
+    ):
+        state = {
+            "student_profile": {
+                "student_id": 999,
+                "daily_available_hours": 4,
+                "learning_preference": "Practice",
+            },
+            "learning_gaps": [
+                {
+                    "topic_id": 302,
+                    "topic_name": "SQL Joins",
+                    "score": 40,
+                    "status": "weak",
+                    "priority": "high",
+                    "prerequisite_topic_id": 301,
+                }
+            ],
+            "resources": [],
+            "student_memory": {
+                "latest_performance": []
+            },
+        }
+
+        result = study_plan_agent(state)
+
+        self.assertEqual(result["next_action"], "validation")
+
+        plan = result["study_plan"]
+        self.assertEqual(plan["total_sessions"], 2)
+
+        sessions = plan["sessions"]
+
+        self.assertEqual(sessions[0]["topic_id"], 301)
+        self.assertEqual(
+            sessions[0]["session_type"],
+            "prerequisite_revision",
+        )
+        self.assertIsNone(sessions[0]["score"])
+        self.assertEqual(
+            sessions[0]["learning_status"],
+            "not_assessed",
+        )
+        self.assertEqual(sessions[0]["priority"], "high")
+
+        self.assertEqual(sessions[1]["topic_id"], 302)
+        self.assertEqual(
+            sessions[1]["session_type"],
+            "target_topic",
+        )
+
+
+    @patch(
+        "app.agents.study_plan_agent.get_owned_topic_ids",
+        return_value={
+            "topic_ids": {301, 302},
+            "topic_difficulties": {},
+            "topic_details": {
+                301: {
+                    "topic_name": "SQL Basics",
+                    "prerequisite_topic_id": None,
+                },
+                302: {
+                    "topic_name": "SQL Joins",
+                    "prerequisite_topic_id": 301,
+                },
+            },
+        },
+    )
+    def test_weak_assessed_prerequisite_is_scheduled_first(
+        self,
+        mock_owned_topics,
+    ):
+        state = {
+            "student_profile": {
+                "student_id": 999,
+                "daily_available_hours": 4,
+                "learning_preference": "Practice",
+            },
+            "learning_gaps": [
+                {
+                    "topic_id": 302,
+                    "topic_name": "SQL Joins",
+                    "score": 40,
+                    "prerequisite_topic_id": 301,
+                },
+                {
+                    "topic_id": 301,
+                    "topic_name": "SQL Basics",
+                    "score": 40,
+                    "prerequisite_topic_id": None,
+                },
+            ],
+            "resources": [],
+            "student_memory": {},
+        }
+
+        result = study_plan_agent(state)
+        sessions = result["study_plan"]["sessions"]
+
+        self.assertEqual(len(sessions), 2)
+        self.assertEqual(sessions[0]["topic_id"], 301)
+        self.assertEqual(
+            sessions[0]["session_type"],
+            "prerequisite_revision",
+        )
+        self.assertEqual(sessions[0]["score"], 40.0)
+        self.assertEqual(sessions[1]["topic_id"], 302)
+
+    @patch(
+        "app.agents.study_plan_agent.get_owned_topic_ids",
+        return_value={
+            "topic_ids": {301, 302},
+            "topic_difficulties": {},
+            "topic_details": {
+                301: {
+                    "topic_name": "SQL Basics",
+                    "prerequisite_topic_id": None,
+                },
+                302: {
+                    "topic_name": "SQL Joins",
+                    "prerequisite_topic_id": 301,
+                },
+            },
+        },
+    )
+    def test_strong_prerequisite_does_not_get_revision_session(
+        self,
+        mock_owned_topics,
+    ):
+        state = {
+            "student_profile": {
+                "student_id": 999,
+                "daily_available_hours": 4,
+                "learning_preference": "Practice",
+            },
+            "learning_gaps": [
+                {
+                    "topic_id": 302,
+                    "topic_name": "SQL Joins",
+                    "score": 40,
+                    "prerequisite_topic_id": 301,
+                },
+            ],
+            "resources": [],
+            "student_memory": {
+                "latest_performance": [
+                    {
+                        "topic_id": 301,
+                        "topic_name": "SQL Basics",
+                        "score": 85,
+                    }
+                ]
+            },
+        }
+
+        result = study_plan_agent(state)
+        sessions = result["study_plan"]["sessions"]
+
+        self.assertEqual(len(sessions), 1)
+        self.assertEqual(sessions[0]["topic_id"], 302)
+        self.assertEqual(
+            sessions[0]["session_type"],
+            "target_topic",
+        )
+
+    @patch(
+        "app.agents.study_plan_agent.get_owned_topic_ids",
+        return_value={
+            "topic_ids": {302},
+            "topic_difficulties": {},
+            "topic_details": {
+                302: {
+                    "topic_name": "SQL Joins",
+                    "prerequisite_topic_id": 301,
+                },
+            },
+        },
+    )
+    def test_unowned_prerequisite_is_not_scheduled(
+        self,
+        mock_owned_topics,
+    ):
+        state = {
+            "student_profile": {
+                "student_id": 999,
+                "daily_available_hours": 4,
+                "learning_preference": "Practice",
+            },
+            "learning_gaps": [
+                {
+                    "topic_id": 302,
+                    "topic_name": "SQL Joins",
+                    "score": 40,
+                    "prerequisite_topic_id": 301,
+                },
+            ],
+            "resources": [],
+            "student_memory": {},
+        }
+
+        result = study_plan_agent(state)
+        sessions = result["study_plan"]["sessions"]
+
+        self.assertEqual(len(sessions), 1)
+        self.assertEqual(sessions[0]["topic_id"], 302)
+        self.assertNotIn(
+            301,
+            [session["topic_id"] for session in sessions],
+        )
+
+    @patch(
+        "app.agents.study_plan_agent.get_owned_topic_ids",
+        return_value={
+            "topic_ids": {301, 302, 303},
+            "topic_difficulties": {},
+            "topic_details": {
+                301: {
+                    "topic_name": "SQL Basics",
+                    "prerequisite_topic_id": None,
+                },
+                302: {
+                    "topic_name": "SQL Joins",
+                    "prerequisite_topic_id": 301,
+                },
+                303: {
+                    "topic_name": "SQL Subqueries",
+                    "prerequisite_topic_id": 301,
+                },
+            },
+        },
+    )
+    def test_shared_prerequisite_is_scheduled_only_once(
+        self,
+        mock_owned_topics,
+    ):
+        state = {
+            "student_profile": {
+                "student_id": 999,
+                "daily_available_hours": 4,
+                "learning_preference": "Practice",
+            },
+            "learning_gaps": [
+                {
+                    "topic_id": 302,
+                    "topic_name": "SQL Joins",
+                    "score": 40,
+                    "prerequisite_topic_id": 301,
+                },
+                {
+                    "topic_id": 303,
+                    "topic_name": "SQL Subqueries",
+                    "score": 60,
+                    "prerequisite_topic_id": 301,
+                },
+            ],
+            "resources": [],
+            "student_memory": {},
+        }
+
+        result = study_plan_agent(state)
+        sessions = result["study_plan"]["sessions"]
+
+        topic_ids = [
+            session["topic_id"]
+            for session in sessions
+        ]
+
+        self.assertEqual(len(sessions), 3)
+        self.assertEqual(topic_ids.count(301), 1)
+        self.assertEqual(topic_ids.count(302), 1)
+        self.assertEqual(topic_ids.count(303), 1)
+
+        self.assertEqual(
+            sessions[0]["session_type"],
+            "prerequisite_revision",
+        )
+
 
     def test_shared_rules_match_topic_lookup(self):
         scores = [20, 49.99, 50, 74.99, 75, 100]

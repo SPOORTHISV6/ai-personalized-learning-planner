@@ -86,8 +86,9 @@ def sanitize_workflow_payload(value: Any) -> Any:
     """
     Remove internal exception details from workflow output.
 
-    Preserve normal evaluation and study-plan information,
-    while replacing values under error-related keys.
+    Preserve normal evaluation and study-plan information.
+    Preserve empty error fields instead of replacing them
+    with a generic error message.
     """
 
     sensitive_keys = {
@@ -101,8 +102,22 @@ def sanitize_workflow_payload(value: Any) -> Any:
         sanitized = {}
 
         for key, item in value.items():
+
             if str(key).lower() in sensitive_keys:
-                sanitized[key] = SAFE_WORKFLOW_ERROR
+
+                # Preserve empty error values.
+                if (
+                    item is None
+                    or (
+                        isinstance(item, (list, tuple, str))
+                        and len(item) == 0
+                    )
+                ):
+                    sanitized[key] = item
+
+                else:
+                    sanitized[key] = SAFE_WORKFLOW_ERROR
+
             else:
                 sanitized[key] = sanitize_workflow_payload(item)
 
@@ -140,9 +155,6 @@ def submit_quiz(
     # -----------------------------------------------------
     # 1. VERIFY QUIZ OWNERSHIP
     # -----------------------------------------------------
-
-    # A nonexistent quiz and another student's quiz both
-    # return 404 to prevent quiz ID enumeration.
 
     quiz = get_owned_quiz(
         db=db,
@@ -195,9 +207,6 @@ def submit_quiz(
         answer.question_id: answer.selected_option
         for answer in submission.answers
     }
-
-    # Defensive duplicate validation. The Pydantic schema
-    # also checks this before the route executes.
 
     if len(submitted_answers) != len(submission.answers):
         raise HTTPException(
@@ -335,7 +344,7 @@ def submit_quiz(
     # -----------------------------------------------------
     # 7. RUN ADAPTIVE WORKFLOW
     # -----------------------------------------------------
-    # The quiz result is already committed.
+    # Quiz result is already committed.
     # Workflow failure must not undo the saved result.
     # -----------------------------------------------------
 
@@ -358,6 +367,10 @@ def submit_quiz(
                 "Adaptive workflow returned an invalid result."
             )
 
+        # -------------------------------------------------
+        # 7A. EXTRACT WORKFLOW ERRORS
+        # -------------------------------------------------
+
         raw_errors = raw_workflow_result.get(
             "errors",
             [],
@@ -369,6 +382,14 @@ def submit_quiz(
         if not isinstance(raw_errors, (list, tuple)):
             raw_errors = [raw_errors]
 
+        workflow_stopped = (
+            raw_workflow_result.get("next_action") == "stop"
+        )
+
+        # -------------------------------------------------
+        # 7B. SANITIZE WORKFLOW OUTPUT
+        # -------------------------------------------------
+
         sanitized_workflow_result = sanitize_workflow_payload(
             raw_workflow_result
         )
@@ -377,12 +398,160 @@ def submit_quiz(
             sanitized_workflow_result
         )
 
-        if raw_errors:
+        # -------------------------------------------------
+        # 7C. EXTRACT WORKFLOW DETAILS
+        # -------------------------------------------------
+
+        evaluation = raw_workflow_result.get("evaluation")
+        validation = raw_workflow_result.get("validation")
+        persisted_plan = raw_workflow_result.get("persisted_plan")
+
+        evaluation_level = (
+            evaluation.get("level")
+            if isinstance(evaluation, Mapping)
+            else None
+        )
+
+        # -------------------------------------------------
+        # 7D. WORKFLOW DIAGNOSTICS
+        # -------------------------------------------------
+
+        logger.warning(
+            "ADAPTIVE WORKFLOW DIAGNOSTICS | "
+            "next_action=%s | errors=%s | "
+            "evaluation_level=%s | validation_valid=%s | "
+            "persisted_plan=%s",
+            raw_workflow_result.get("next_action"),
+            raw_errors,
+            evaluation.get("level")
+            if isinstance(evaluation, Mapping)
+            else None,
+            validation.get("valid")
+            if isinstance(validation, Mapping)
+            else None,
+            {
+                "plan_id": persisted_plan.get("plan_id"),
+                "student_id": persisted_plan.get("student_id"),
+                "status": persisted_plan.get("status"),
+                "total_sessions": persisted_plan.get("total_sessions"),
+            }
+            if isinstance(persisted_plan, Mapping)
+            else None,
+        )
+
+        # -------------------------------------------------
+        # 7E. DETERMINE WORKFLOW COMPLETION
+        # -------------------------------------------------
+
+        # Strong performance completes without a new plan.
+        strong_completion = (
+            evaluation_level == "strong"
+        )
+
+        # Weak/moderate performance requires a valid,
+        # persisted and active study plan.
+        plan_persisted = (
+            isinstance(validation, Mapping)
+            and validation.get("valid") is True
+
+            and isinstance(persisted_plan, Mapping)
+
+            and isinstance(persisted_plan.get("plan_id"), int)
+            and not isinstance(persisted_plan.get("plan_id"), bool)
+            and persisted_plan.get("plan_id") > 0
+
+            and persisted_plan.get("student_id") == sid
+
+            and persisted_plan.get("status") == "active"
+
+            and isinstance(persisted_plan.get("total_sessions"), int)
+            and not isinstance(persisted_plan.get("total_sessions"), bool)
+            and persisted_plan.get("total_sessions") > 0
+        )
+
+        workflow_completed_successfully = (
+            strong_completion
+            or (
+                evaluation_level in {"weak", "moderate"}
+                and plan_persisted
+            )
+        )
+
+        # -------------------------------------------------
+        # 7F. DETAILED STATUS CHECK
+        # -------------------------------------------------
+
+        logger.warning(
+            "WORKFLOW STATUS CHECK | "
+            "raw_errors=%s | stopped=%s | "
+            "evaluation_level=%s | "
+            "strong_completion=%s | "
+            "plan_persisted=%s | "
+            "workflow_completed_successfully=%s",
+            raw_errors,
+            workflow_stopped,
+            evaluation_level,
+            strong_completion,
+            plan_persisted,
+            workflow_completed_successfully,
+        )
+
+        # Additional diagnostics to identify type mismatches.
+        logger.warning(
+            "PLAN CHECK DETAIL | "
+            "validation_mapping=%s | "
+            "validation_valid=%r | "
+            "plan_mapping=%s | "
+            "plan_id=%r (%s) | "
+            "student_id=%r (%s) expected=%r (%s) | "
+            "status=%r | "
+            "total_sessions=%r (%s)",
+            isinstance(validation, Mapping),
+            validation.get("valid")
+            if isinstance(validation, Mapping)
+            else None,
+            isinstance(persisted_plan, Mapping),
+            persisted_plan.get("plan_id")
+            if isinstance(persisted_plan, Mapping)
+            else None,
+            type(persisted_plan.get("plan_id")).__name__
+            if isinstance(persisted_plan, Mapping)
+            else None,
+            persisted_plan.get("student_id")
+            if isinstance(persisted_plan, Mapping)
+            else None,
+            type(persisted_plan.get("student_id")).__name__
+            if isinstance(persisted_plan, Mapping)
+            else None,
+            sid,
+            type(sid).__name__,
+            persisted_plan.get("status")
+            if isinstance(persisted_plan, Mapping)
+            else None,
+            persisted_plan.get("total_sessions")
+            if isinstance(persisted_plan, Mapping)
+            else None,
+            type(persisted_plan.get("total_sessions")).__name__
+            if isinstance(persisted_plan, Mapping)
+            else None,
+        )
+
+        # -------------------------------------------------
+        # 7G. SET FINAL WORKFLOW STATUS
+        # -------------------------------------------------
+
+        if (
+            raw_errors
+            or workflow_stopped
+            or not workflow_completed_successfully
+        ):
+
             workflow_status = "completed_with_errors"
             workflow_error = SAFE_WORKFLOW_ERROR
             errors = [SAFE_WORKFLOW_ERROR]
 
         else:
+
             workflow_status = "completed"
             workflow_error = None
             errors = []
@@ -402,32 +571,46 @@ def submit_quiz(
         errors = [SAFE_WORKFLOW_ERROR]
 
     # -----------------------------------------------------
-    # 8. RETURN RESULT
+    # 8. RETURN QUIZ RESULT AND WORKFLOW DETAILS
     # -----------------------------------------------------
 
     return {
         "message": "Quiz submitted and graded.",
+
         "quiz_id": quiz_id,
         "quiz_title": quiz.title,
         "student_id": sid,
+
         "result_id": result.result_id,
+
         "score": score,
         "total_points": total_points,
         "earned_points": earned_points,
+
         "correct_answers": sum(
             1
             for answer in graded_answers
             if answer["is_correct"]
         ),
+
         "total_questions": len(questions),
+
         "answers": graded_answers,
+
         "workflow_status": workflow_status,
+
         "evaluation": workflow_result.get("evaluation"),
+
         "validation": workflow_result.get("validation"),
+
         "study_plan": workflow_result.get("persisted_plan"),
+
         "next_action": workflow_result.get("next_action"),
+
         "user_feedback": workflow_result.get("user_feedback"),
+
         "errors": errors,
+
         "workflow_error": workflow_error,
     }
 

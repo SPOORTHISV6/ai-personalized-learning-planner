@@ -198,16 +198,34 @@ def normalize_content(content):
 
 
 def get_knowledge_base(topic_name):
-    """Return an explicitly supported knowledge base, or None."""
+    """
+    Return the explicitly supported knowledge base.
+
+    Normalizes topic identifiers so that variations such as:
+        SQL_JOINS
+        sql joins
+        Sql-Joins
+        SQL   JOINS
+
+    all resolve to the same configured knowledge base.
+    """
+
     if not isinstance(topic_name, str):
         return None
 
-    normalized = topic_name.strip().casefold()
+    # Normalize case, underscores, hyphens, and repeated whitespace.
+    normalized = re.sub(
+        r"[\s_-]+",
+        " ",
+        topic_name.strip().casefold()
+    ).strip()
 
-    if not normalized or normalized not in TOPIC_MAP:
+    if not normalized:
         return None
 
-    return TOPIC_MAP[normalized]
+    # Only explicitly configured topics are supported.
+    return TOPIC_MAP.get(normalized)
+
 
 
 # ---------------------------------------------------------
@@ -1041,6 +1059,7 @@ def resource_agent(state):
             "next_action": "stop",
             "errors": [message],
             "resources": [],
+            "resource_warnings": [],
         }
 
     if not isinstance(state, dict):
@@ -1061,6 +1080,7 @@ def resource_agent(state):
         )
 
     all_resources = []
+    resource_warnings = []
 
     for gap in learning_gaps:
         topic_name = gap.get("topic_name")
@@ -1084,15 +1104,28 @@ def resource_agent(state):
                 learning_status=gap.get("status"),
             )
 
+            if not isinstance(resources, list):
+                resource_warnings.append(
+                    f"Unexpected retrieval result for {topic_name}."
+                )
+                continue
+
         except Exception as exc:
             print(
                 f"[Resource Agent] Topic retrieval failed: "
                 f"{type(exc).__name__}"
             )
-            resources = []
+
+            resource_warnings.append(
+                f"Resource retrieval failed for {topic_name}."
+            )
+            continue
 
         for resource in resources:
             if not isinstance(resource, dict):
+                resource_warnings.append(
+                    f"An invalid resource entry was skipped for {topic_name}."
+                )
                 continue
 
             all_resources.append({
@@ -1124,6 +1157,12 @@ def resource_agent(state):
         "filtered learning resources."
     )
 
-    state["resources"] = all_resources
+    if resource_warnings:
+        print(
+            f"[Resource Agent] Warnings: {len(resource_warnings)}"
+        )
 
-    return state
+    return {
+        "resources": all_resources,
+        "resource_warnings": resource_warnings,
+    }

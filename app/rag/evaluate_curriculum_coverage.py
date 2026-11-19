@@ -111,7 +111,7 @@ CURRICULUM = {
             },
         },
     },
-    "sql_joins": {
+    "sql joins": {
         "subject": "DBMS",
         "concepts": {
             "INNER JOIN": {

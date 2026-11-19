@@ -16,6 +16,10 @@ SAFE_LIFECYCLE_ERROR = (
 )
 
 
+# ---------------------------------------------------------
+# HELPER FUNCTIONS
+# ---------------------------------------------------------
+
 def _validate_positive_id(value):
     """
     Accept only positive integers or canonical positive integer strings.
@@ -44,6 +48,45 @@ def _validate_positive_id(value):
     return None
 
 
+def _rollback_safely(db):
+    """Attempt rollback without allowing cleanup errors to escape."""
+    if db is None:
+        return
+
+    try:
+        db.rollback()
+    except Exception as exc:
+        logger.error(
+            "[Session Lifecycle Agent] Database rollback failed: %s",
+            type(exc).__name__,
+        )
+
+
+def _close_safely(db):
+    """Close the database session without overriding operation results."""
+    if db is None:
+        return
+
+    try:
+        db.close()
+    except Exception as exc:
+        logger.error(
+            "[Session Lifecycle Agent] Database cleanup failed: %s",
+            type(exc).__name__,
+        )
+
+
+def _safe_failure_result():
+    """Return a consistent sanitized database failure."""
+    return {
+        "success": False,
+        "errors": [SAFE_LIFECYCLE_ERROR],
+    }
+
+
+# ---------------------------------------------------------
+# OVERDUE SESSION DETECTION
+# ---------------------------------------------------------
 
 def detect_overdue_sessions(student_id, today=None):
     """
@@ -73,9 +116,11 @@ def detect_overdue_sessions(student_id, today=None):
             "errors": ["The supplied date is invalid."],
         }
 
-    db = SessionLocal()
+    db = None
 
     try:
+        db = SessionLocal()
+
         sessions = (
             db.query(StudyPlanItem)
             .join(
@@ -117,7 +162,7 @@ def detect_overdue_sessions(student_id, today=None):
         }
 
     except Exception:
-        db.rollback()
+        _rollback_safely(db)
 
         logger.exception(
             "[Session Lifecycle Agent] Overdue detection failed "
@@ -125,14 +170,15 @@ def detect_overdue_sessions(student_id, today=None):
             student_id,
         )
 
-        return {
-            "success": False,
-            "errors": [SAFE_LIFECYCLE_ERROR],
-        }
+        return _safe_failure_result()
 
     finally:
-        db.close()
+        _close_safely(db)
 
+
+# ---------------------------------------------------------
+# COMPLETE STUDY SESSION
+# ---------------------------------------------------------
 
 def complete_session(student_id, item_id):
     """
@@ -157,9 +203,11 @@ def complete_session(student_id, item_id):
             "errors": ["Session item ID is invalid."],
         }
 
-    db = SessionLocal()
+    db = None
 
     try:
+        db = SessionLocal()
+
         session = (
             db.query(StudyPlanItem)
             .join(
@@ -218,7 +266,7 @@ def complete_session(student_id, item_id):
         }
 
     except Exception:
-        db.rollback()
+        _rollback_safely(db)
 
         logger.exception(
             "[Session Lifecycle Agent] Completion failed "
@@ -227,14 +275,15 @@ def complete_session(student_id, item_id):
             item_id,
         )
 
-        return {
-            "success": False,
-            "errors": [SAFE_LIFECYCLE_ERROR],
-        }
+        return _safe_failure_result()
 
     finally:
-        db.close()
+        _close_safely(db)
 
+
+# ---------------------------------------------------------
+# SESSION LIFECYCLE WORKFLOW AGENT
+# ---------------------------------------------------------
 
 def session_lifecycle_agent(state):
     """
@@ -245,53 +294,79 @@ def session_lifecycle_agent(state):
       - complete
     """
 
-    if not isinstance(state, dict):
-        return {
-            "errors": ["Invalid workflow state."],
-            "next_action": "stop",
-        }
-
-    action = state.get("session_action")
-    student_id = _validate_positive_id(
-        state.get("student_id")
-    )
-
-    if student_id is None:
-        return {
-            "errors": ["Student ID is missing or invalid."],
-            "next_action": "stop",
-        }
-
-    if action == "detect_overdue":
-
-        result = detect_overdue_sessions(student_id)
-
-    elif action == "complete":
-
-        item_id = _validate_positive_id(
-            state.get("session_item_id")
-        )
-
-        if item_id is None:
+    try:
+        if not isinstance(state, dict):
             return {
-                "errors": ["Session item ID is missing or invalid."],
+                "errors": ["Invalid workflow state."],
                 "next_action": "stop",
             }
 
-        result = complete_session(student_id, item_id)
+        action = state.get("session_action")
 
-    else:
+        student_id = _validate_positive_id(
+            state.get("student_id")
+        )
+
+        if student_id is None:
+            return {
+                "errors": ["Student ID is missing or invalid."],
+                "next_action": "stop",
+            }
+
+        if action == "detect_overdue":
+
+            result = detect_overdue_sessions(student_id)
+
+        elif action == "complete":
+
+            item_id = _validate_positive_id(
+                state.get("session_item_id")
+            )
+
+            if item_id is None:
+                return {
+                    "errors": [
+                        "Session item ID is missing or invalid."
+                    ],
+                    "next_action": "stop",
+                }
+
+            result = complete_session(student_id, item_id)
+
+        else:
+            return {
+                "errors": [
+                    "Unsupported session action. "
+                    "Use 'detect_overdue' or 'complete'."
+                ],
+                "next_action": "stop",
+            }
+
+        if not isinstance(result, dict):
+            logger.error(
+                "[Session Lifecycle Agent] "
+                "Lifecycle operation returned an invalid result."
+            )
+
+            return {
+                "errors": [SAFE_LIFECYCLE_ERROR],
+                "next_action": "stop",
+            }
+
         return {
-            "errors": [
-                "Unsupported session action. "
-                "Use 'detect_overdue' or 'complete'."
-            ],
-            "next_action": "stop",
+            "session_lifecycle_result": result,
+            "next_action": (
+                "complete" if result.get("success") is True else "stop"
+            ),
         }
 
-    return {
-        "session_lifecycle_result": result,
-        "next_action": (
-            "complete" if result.get("success") else "stop"
-        ),
-    }
+    except Exception:
+        logger.exception(
+            "[Session Lifecycle Agent] "
+            "Unexpected workflow dispatch failure."
+        )
+
+        return {
+            "errors": [SAFE_LIFECYCLE_ERROR],
+            "next_action": "stop",
+        }

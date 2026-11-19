@@ -1,6 +1,7 @@
 
 import logging
 
+from app.database.connection import SessionLocal
 from app.tools.learning_gap import calculate_learning_gaps
 
 
@@ -12,7 +13,6 @@ SAFE_ERROR = "Learning gaps could not be calculated. Please try again later."
 def learning_gap_agent(state):
     print("\n[Learning Gap Agent] Analyzing performance...")
 
-    # Validate workflow state
     if not isinstance(state, dict):
         return {
             "errors": ["Invalid workflow state"],
@@ -21,7 +21,6 @@ def learning_gap_agent(state):
 
     student_id = state.get("student_id")
 
-    # Reject bool because bool is a subclass of int in Python
     if (
         isinstance(student_id, bool)
         or not isinstance(student_id, int)
@@ -32,8 +31,12 @@ def learning_gap_agent(state):
             "next_action": "stop",
         }
 
+    db = None
+
     try:
-        gaps = calculate_learning_gaps(student_id)
+        db = SessionLocal()
+
+        gaps = calculate_learning_gaps(student_id, db)
 
         if not isinstance(gaps, list):
             logger.error(
@@ -58,9 +61,7 @@ def learning_gap_agent(state):
                     "next_action": "stop",
                 }
 
-        print(
-            f"[Learning Gap Agent] Found {len(gaps)} topic records"
-        )
+        print(f"[Learning Gap Agent] Found {len(gaps)} topic records")
 
         for gap in gaps:
             print(
@@ -86,3 +87,14 @@ def learning_gap_agent(state):
             "errors": [SAFE_ERROR],
             "next_action": "stop",
         }
+
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                logger.exception(
+                    "Learning gap database session cleanup failed "
+                    "for student_id=%s",
+                    student_id,
+                )

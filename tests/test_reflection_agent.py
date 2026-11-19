@@ -1,5 +1,6 @@
 
 import unittest
+from unittest.mock import patch
 
 from app.agents.reflection_agent import reflection_agent
 
@@ -9,14 +10,8 @@ class TestReflectionAgent(unittest.TestCase):
     def test_missing_evaluation_stops_workflow(self):
         result = reflection_agent({})
 
-        self.assertEqual(
-            result["next_action"],
-            "stop"
-        )
-        self.assertIn(
-            "Evaluation data is missing",
-            result["errors"]
-        )
+        self.assertEqual(result["next_action"], "stop")
+        self.assertIn("Evaluation data is missing", result["errors"])
 
     def test_weak_performance_triggers_replanning(self):
         state = {
@@ -24,24 +19,15 @@ class TestReflectionAgent(unittest.TestCase):
                 "score": 40,
                 "level": "weak",
                 "topic_name": "Normalization",
-                "recommended_action": "increase_practice"
+                "recommended_action": "increase_practice",
             }
         }
 
         result = reflection_agent(state)
 
-        self.assertEqual(
-            result["next_action"],
-            "replan"
-        )
-        self.assertIn(
-            "weak",
-            result["user_feedback"].lower()
-        )
-        self.assertIn(
-            "higher priority",
-            result["user_feedback"].lower()
-        )
+        self.assertEqual(result["next_action"], "replan")
+        self.assertIn("weak", result["user_feedback"].lower())
+        self.assertIn("higher priority", result["user_feedback"].lower())
 
     def test_moderate_performance_triggers_replanning(self):
         state = {
@@ -49,19 +35,16 @@ class TestReflectionAgent(unittest.TestCase):
                 "score": 60,
                 "level": "moderate",
                 "topic_name": "SQL Joins",
-                "recommended_action": "continue_practice"
+                "recommended_action": "continue_practice",
             }
         }
 
         result = reflection_agent(state)
 
-        self.assertEqual(
-            result["next_action"],
-            "replan"
-        )
+        self.assertEqual(result["next_action"], "replan")
         self.assertIn(
             "continue practicing",
-            result["user_feedback"].lower()
+            result["user_feedback"].lower(),
         )
 
     def test_strong_performance_completes_workflow(self):
@@ -70,19 +53,16 @@ class TestReflectionAgent(unittest.TestCase):
                 "score": 90,
                 "level": "strong",
                 "topic_name": "Python OOP",
-                "recommended_action": "reduce_priority"
+                "recommended_action": "reduce_priority",
             }
         }
 
         result = reflection_agent(state)
 
-        self.assertEqual(
-            result["next_action"],
-            "complete"
-        )
+        self.assertEqual(result["next_action"], "complete")
         self.assertIn(
             "lower priority",
-            result["user_feedback"].lower()
+            result["user_feedback"].lower(),
         )
 
     def test_unknown_performance_level_stops_workflow(self):
@@ -90,20 +70,96 @@ class TestReflectionAgent(unittest.TestCase):
             "evaluation": {
                 "score": 65,
                 "level": "unknown",
-                "topic_name": "Test Topic"
+                "topic_name": "Test Topic",
             }
         }
 
         result = reflection_agent(state)
 
-        self.assertEqual(
-            result["next_action"],
-            "stop"
-        )
+        self.assertEqual(result["next_action"], "stop")
         self.assertIn(
             "Unknown performance level: unknown",
-            result["errors"]
+            result["errors"],
         )
+
+    @patch(
+        "app.agents.reflection_agent.classify_performance",
+        return_value=[],
+    )
+    def test_classifier_returning_list_does_not_crash(self, mock_classifier):
+        state = {
+            "evaluation": {
+                "score": 40,
+                "level": "weak",
+                "topic_name": "Normalization",
+            }
+        }
+
+        result = reflection_agent(state)
+
+        self.assertEqual(result["next_action"], "stop")
+        self.assertIn("errors", result)
+
+    @patch(
+        "app.agents.reflection_agent.classify_performance",
+        return_value={"level": "weak"},
+    )
+    def test_classifier_returning_dictionary_does_not_crash(
+        self,
+        mock_classifier,
+    ):
+        state = {
+            "evaluation": {
+                "score": 40,
+                "level": "weak",
+                "topic_name": "Normalization",
+            }
+        }
+
+        result = reflection_agent(state)
+
+        self.assertEqual(result["next_action"], "stop")
+        self.assertIn("errors", result)
+
+    def test_unexpected_score_conversion_exception_is_handled(self):
+
+        class UnexpectedScore:
+            def __float__(self):
+                raise RuntimeError("Unexpected conversion failure")
+
+        state = {
+            "evaluation": {
+                "score": UnexpectedScore(),
+                "level": "weak",
+                "topic_name": "Normalization",
+            }
+        }
+
+        result = reflection_agent(state)
+
+        self.assertEqual(result["next_action"], "stop")
+        self.assertIn("errors", result)
+
+    @patch(
+        "app.agents.reflection_agent.sanitize_topic_name",
+        side_effect=RuntimeError("Unexpected sanitization failure"),
+    )
+    def test_unexpected_processing_exception_is_handled(
+        self,
+        mock_sanitize,
+    ):
+        state = {
+            "evaluation": {
+                "score": 40,
+                "level": "weak",
+                "topic_name": "Normalization",
+            }
+        }
+
+        result = reflection_agent(state)
+
+        self.assertEqual(result["next_action"], "stop")
+        self.assertIn("errors", result)
 
 
 if __name__ == "__main__":

@@ -42,3 +42,10 @@ token.json
 
 # Cloud backup recovery test files
 cloud_restore_test/
+
+# Local sensitive and generated files
+/passwords.txt
+/token_testing_*.json
+/adaptive_trace.txt
+/project_files.txt
+/logs/

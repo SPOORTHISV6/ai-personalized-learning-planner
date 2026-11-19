@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -139,6 +140,16 @@ def create_study_plan_item(
         duration_minutes=item.duration_minutes,
         priority=item.priority,
         status=item.status,
+
+        # Additional study session details
+        learning_objective=item.learning_objective,
+        study_activity=item.study_activity,
+        resources=item.resources,
+        expected_outcome=item.expected_outcome,
+        session_type=item.session_type,
+        reason=item.reason,
+        score=item.score,
+        learning_status=item.learning_status,
     )
 
     try:

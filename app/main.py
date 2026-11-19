@@ -1,3 +1,6 @@
+
+import os
+
 from fastapi import FastAPI
 
 from app.api.student_routes import router as student_router
@@ -14,15 +17,41 @@ from app.api.resource_routes import router as resource_router
 from app.api.dashboard_routes import router as dashboard_router
 from app.api.auth_routes import router as auth_router
 
+
+# ------------------------------------------------------------
+# APPLICATION ENVIRONMENT
+# ------------------------------------------------------------
+
+APP_ENV = os.getenv("APP_ENV", "development").strip().lower()
+
+if APP_ENV not in {"development", "testing", "production"}:
+    raise RuntimeError(
+        "Invalid APP_ENV. Use development, testing, or production."
+    )
+
+IS_PRODUCTION = APP_ENV == "production"
+
+
+# ------------------------------------------------------------
+# FASTAPI APPLICATION
+# ------------------------------------------------------------
+
 app = FastAPI(
     title="AI Personalized Learning Planner",
     description=(
         "Agentic AI based personalized learning "
         "and study planning system"
     ),
-    version="1.0.0"
+    version="1.0.0",
+    docs_url=None if IS_PRODUCTION else "/docs",
+    redoc_url=None if IS_PRODUCTION else "/redoc",
+    openapi_url=None if IS_PRODUCTION else "/openapi.json",
 )
 
+
+# ------------------------------------------------------------
+# ROOT ENDPOINT
+# ------------------------------------------------------------
 
 @app.get("/")
 def root():

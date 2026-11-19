@@ -1,5 +1,5 @@
-
 import logging
+import math
 from datetime import date, datetime
 
 from app.database.connection import SessionLocal
@@ -25,6 +25,17 @@ PRIORITY_MAP = {
 }
 
 VALID_DATABASE_PRIORITIES = {1, 3, 5}
+
+SESSION_DETAIL_FIELDS = (
+    "learning_objective",
+    "study_activity",
+    "resources",
+    "expected_outcome",
+    "session_type",
+    "reason",
+    "score",
+    "learning_status",
+)
 
 
 # ---------------------------------------------------------
@@ -99,6 +110,62 @@ def normalize_priority(value):
     raise ValueError("Unsupported priority.")
 
 
+def normalize_session_details(session):
+    """
+    Extract optional Study Plan Agent details.
+
+    Missing or invalid optional values are stored as None.
+    Resources must be a list of dictionaries.
+    Non-finite scores are normalized to None.
+    """
+    details = {}
+
+    for field in SESSION_DETAIL_FIELDS:
+        value = session.get(field)
+
+        if field == "resources":
+            if (
+                isinstance(value, list)
+                and all(isinstance(resource, dict) for resource in value)
+            ):
+                details[field] = value
+            else:
+                details[field] = None
+
+        elif field == "score":
+            if (
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+            ):
+                try:
+                    numeric_score = float(value)
+
+                    details[field] = (
+                        numeric_score
+                        if math.isfinite(numeric_score)
+                        else None
+                    )
+                except (TypeError, ValueError, OverflowError):
+                    details[field] = None
+            else:
+                details[field] = None
+
+        else:
+            details[field] = (
+                value if isinstance(value, str) else None
+            )
+
+    return details
+
+
+def get_item_details(item):
+    """Return persisted session details as a response dictionary."""
+    return {
+        field: getattr(item, field, None)
+        for field in SESSION_DETAIL_FIELDS
+    }
+
+
 def error_result(message):
     """Return a consistent workflow stop result."""
     return {
@@ -151,6 +218,7 @@ def persistence_agent(state):
     - Existing active-plan superseding.
     - Atomic database transaction.
     - Rollback on persistence failures.
+    - Persistence of generated session details.
     """
 
     logger.info(
@@ -262,6 +330,7 @@ def persistence_agent(state):
             "date": session_date,
             "duration_minutes": duration,
             "priority": priority,
+            **normalize_session_details(session),
         }
 
         prepared_sessions.append(prepared_session)
@@ -337,7 +406,8 @@ def persistence_agent(state):
                     StudyPlanItem.plan_id == existing_plan.plan_id
                 )
                 .order_by(
-                    StudyPlanItem.scheduled_date
+                    StudyPlanItem.scheduled_date,
+                    StudyPlanItem.item_id,
                 )
                 .all()
             )
@@ -371,7 +441,13 @@ def persistence_agent(state):
 
             for existing_item, session in zip(
                 existing_items,
-                prepared_sessions,
+                sorted(
+                    prepared_sessions,
+                    key=lambda value: (
+                        value["date"],
+                        value["topic_id"],
+                    ),
+                ),
             ):
 
                 existing_date = existing_item.scheduled_date
@@ -419,16 +495,43 @@ def persistence_agent(state):
                     == identical_plan.plan_id
                 )
                 .order_by(
-                    StudyPlanItem.scheduled_date
+                    StudyPlanItem.scheduled_date,
+                    StudyPlanItem.item_id,
                 )
                 .all()
             )
 
-            persisted_items = []
+            sorted_sessions = sorted(
+                prepared_sessions,
+                key=lambda value: (
+                    value["date"],
+                    value["topic_id"],
+                ),
+            )
 
-            for item in existing_items:
-                persisted_items.append({
+            persisted_items = []
+            details_updated = False
+
+            for item, session in zip(
+                existing_items,
+                sorted_sessions,
+            ):
+
+                # Fill missing details without overwriting
+                # previously stored non-empty values.
+                for field in SESSION_DETAIL_FIELDS:
+                    new_value = session.get(field)
+
+                    if new_value is not None:
+                        old_value = getattr(item, field, None)
+
+                        if old_value != new_value:
+                            setattr(item, field, new_value)
+                            details_updated = True
+
+                item_response = {
                     "item_id": item.item_id,
+                    "plan_id": item.plan_id,
                     "topic_id": item.topic_id,
                     "scheduled_date": str(
                         item.scheduled_date
@@ -436,7 +539,15 @@ def persistence_agent(state):
                     "duration_minutes": item.duration_minutes,
                     "priority": item.priority,
                     "status": item.status,
-                })
+                    **get_item_details(item),
+                }
+
+                persisted_items.append(item_response)
+
+            if details_updated:
+                db.commit()
+            else:
+                db.rollback()
 
             return {
                 "persisted_plan": {
@@ -505,6 +616,16 @@ def persistence_agent(state):
                 duration_minutes=session["duration_minutes"],
                 priority=session["priority"],
                 status="pending",
+
+                # Persist all additional session details.
+                learning_objective=session["learning_objective"],
+                study_activity=session["study_activity"],
+                resources=session["resources"],
+                expected_outcome=session["expected_outcome"],
+                session_type=session["session_type"],
+                reason=session["reason"],
+                score=session["score"],
+                learning_status=session["learning_status"],
             )
 
             db.add(item)
@@ -512,6 +633,7 @@ def persistence_agent(state):
 
             persisted_items.append({
                 "item_id": item.item_id,
+                "plan_id": item.plan_id,
                 "topic_id": item.topic_id,
                 "scheduled_date": str(
                     item.scheduled_date
@@ -519,6 +641,7 @@ def persistence_agent(state):
                 "duration_minutes": item.duration_minutes,
                 "priority": item.priority,
                 "status": item.status,
+                **get_item_details(item),
             })
 
         # -------------------------------------------------
@@ -554,7 +677,15 @@ def persistence_agent(state):
 
     except Exception:
         if db is not None:
-            db.rollback()
+            try:
+                db.rollback()
+            except Exception as rollback_exc:
+                logger.error(
+                    "[Persistence Agent] Rollback failed "
+                    "for student_id=%s. Error type: %s",
+                    student_id,
+                    type(rollback_exc).__name__,
+                )
 
         logger.exception(
             "[Persistence Agent] Unexpected persistence error "
@@ -573,4 +704,12 @@ def persistence_agent(state):
 
     finally:
         if db is not None:
-            db.close()
+            try:
+                db.close()
+            except Exception as close_exc:
+                logger.error(
+                    "[Persistence Agent] Database cleanup failed "
+                    "for student_id=%s. Error type: %s",
+                    student_id,
+                    type(close_exc).__name__,
+                )

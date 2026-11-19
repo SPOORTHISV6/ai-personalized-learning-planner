@@ -1,3 +1,4 @@
+
 import logging
 import math
 import re
@@ -28,7 +29,10 @@ SAFE_ERROR_FEEDBACK = "Evaluation could not be processed."
 # HELPER FUNCTIONS
 # ---------------------------------------------------------
 
-def stop_workflow(error_message, user_feedback=SAFE_ERROR_FEEDBACK):
+def stop_workflow(
+    error_message,
+    user_feedback=SAFE_ERROR_FEEDBACK,
+):
     """Return a consistent safe workflow-stop response."""
     return {
         "errors": [error_message],
@@ -72,7 +76,8 @@ def validate_score(raw_score):
     try:
         score = float(raw_score)
 
-    except (TypeError, ValueError, OverflowError):
+    except Exception:
+        logger.exception("Evaluation score conversion failed")
         return None, "Evaluation score is missing or invalid"
 
     if not math.isfinite(score):
@@ -85,10 +90,10 @@ def validate_score(raw_score):
 
 
 # ---------------------------------------------------------
-# REFLECTION AGENT
+# REFLECTION AGENT INTERNAL IMPLEMENTATION
 # ---------------------------------------------------------
 
-def reflection_agent(state):
+def _reflection_agent_impl(state):
     """
     Analyze student performance and determine the next workflow action.
 
@@ -105,9 +110,7 @@ def reflection_agent(state):
     # -----------------------------------------------------
 
     if not isinstance(state, dict):
-        return stop_workflow(
-            "Invalid workflow state",
-        )
+        return stop_workflow("Invalid workflow state")
 
     # -----------------------------------------------------
     # 2. RETRIEVE AND VALIDATE EVALUATION
@@ -116,14 +119,10 @@ def reflection_agent(state):
     evaluation = state.get("evaluation")
 
     if evaluation is None:
-        return stop_workflow(
-            "Evaluation data is missing",
-        )
+        return stop_workflow("Evaluation data is missing")
 
     if not isinstance(evaluation, dict):
-        return stop_workflow(
-            "Evaluation data is invalid",
-        )
+        return stop_workflow("Evaluation data is invalid")
 
     # -----------------------------------------------------
     # 3. VALIDATE SCORE
@@ -153,15 +152,18 @@ def reflection_agent(state):
         expected_level = classify_performance(score)
 
     except Exception:
-        logger.exception(
-            "Performance classification failed"
-        )
+        logger.exception("Performance classification failed")
 
         return stop_workflow(
             "Performance classification failed",
         )
 
-    if expected_level not in VALID_PERFORMANCE_LEVELS:
+    # Validate the type before checking set membership.
+    # This prevents TypeError for lists and dictionaries.
+    if (
+        not isinstance(expected_level, str)
+        or expected_level not in VALID_PERFORMANCE_LEVELS
+    ):
         logger.error(
             "Shared performance rules returned an invalid level"
         )
@@ -237,9 +239,7 @@ def reflection_agent(state):
             "next study plan."
         )
 
-        print(
-            "[Reflection Agent] Weak performance detected."
-        )
+        print("[Reflection Agent] Weak performance detected.")
 
         return {
             "user_feedback": feedback,
@@ -259,9 +259,7 @@ def reflection_agent(state):
             "the topic before moving it to a lower priority."
         )
 
-        print(
-            "[Reflection Agent] Moderate performance detected."
-        )
+        print("[Reflection Agent] Moderate performance detected.")
 
         return {
             "user_feedback": feedback,
@@ -279,11 +277,35 @@ def reflection_agent(state):
         "in the next study plan."
     )
 
-    print(
-        "[Reflection Agent] Strong performance detected."
-    )
+    print("[Reflection Agent] Strong performance detected.")
 
     return {
         "user_feedback": feedback,
         "next_action": "complete",
     }
+
+
+# ---------------------------------------------------------
+# REFLECTION AGENT SAFE ENTRY POINT
+# ---------------------------------------------------------
+
+def reflection_agent(state):
+    """
+    Safely execute the reflection agent.
+
+    Unexpected exceptions are logged internally and converted
+    into a controlled workflow-stop response.
+    """
+
+    try:
+        return _reflection_agent_impl(state)
+
+    except Exception:
+        logger.exception(
+            "Unexpected error occurred in Reflection Agent"
+        )
+
+        return stop_workflow(
+            "Reflection processing failed",
+            SAFE_ERROR_FEEDBACK,
+        )

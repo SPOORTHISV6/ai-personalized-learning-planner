@@ -76,4 +76,11 @@ def profile_agent(state):
 
     finally:
         if db is not None:
-            db.close()
+            try:
+                db.close()
+            except Exception:
+                logger.exception(
+                    "Profile database session cleanup failed "
+                    "for student_id=%s",
+                    student_id,
+                )

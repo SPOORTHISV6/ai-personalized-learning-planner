@@ -1,3 +1,4 @@
+
 from datetime import datetime, timedelta
 import math
 import re
@@ -93,9 +94,13 @@ def stop_workflow(message, student_id=None):
 # TOPIC OWNERSHIP
 # ---------------------------------------------------------
 
-def get_owned_topic_ids(student_id):
+def get_owned_topic_ids(student_id, include_difficulty=False):
     """
-    Return topic IDs belonging to subjects owned by the given student.
+    Return database-verified topics belonging to the given student.
+
+    The default return type remains a set for backwards compatibility.
+    When include_difficulty=True, return owned IDs, difficulty values,
+    and metadata required to schedule unassessed prerequisites safely.
     """
     if not is_positive_integer(student_id):
         raise ValueError("Invalid student ID.")
@@ -103,26 +108,60 @@ def get_owned_topic_ids(student_id):
     db = SessionLocal()
 
     try:
-        rows = (
-            db.query(Topic.topic_id)
-            .join(
-                Subject,
-                Topic.subject_id == Subject.subject_id,
-            )
-            .filter(
-                Subject.student_id == student_id
-            )
-            .all()
-        )
+        rows = db.query(
+            Topic.topic_id,
+            Topic.difficulty,
+            Topic.topic_name,
+            Topic.prerequisite_topic_id,
+        ).join(
+            Subject,
+            Topic.subject_id == Subject.subject_id,
+        ).filter(
+            Subject.student_id == student_id
+        ).all()
 
-        return {
+        owned_topic_ids = {
             row[0]
             for row in rows
             if is_positive_integer(row[0])
         }
 
+        if not include_difficulty:
+            return owned_topic_ids
+
+        topic_difficulties = {
+            row[0]: row[1]
+            for row in rows
+            if (
+                is_positive_integer(row[0])
+                and is_positive_integer(row[1])
+            )
+        }
+
+        topic_details = {
+            row[0]: {
+                "topic_name": validate_topic_name(row[2], row[0]),
+                "prerequisite_topic_id": row[3],
+            }
+            for row in rows
+            if is_positive_integer(row[0])
+        }
+
+        return {
+            "topic_ids": owned_topic_ids,
+            "topic_difficulties": topic_difficulties,
+            "topic_details": topic_details,
+        }
+
     finally:
-        db.close()
+        try:
+            db.close()
+        except Exception as exc:
+            print(
+                "[Study Plan Agent] "
+                "Database cleanup failed: "
+                f"{type(exc).__name__}"
+            )
 
 
 def filter_student_data(
@@ -467,7 +506,6 @@ def create_study_activity(
                 "review examples, and solve a few practice questions "
                 "before starting the dependent topic."
             )
-
         return (
             f"Review the prerequisite concepts required for "
             f"{topic_name}, with emphasis on the areas needed "
@@ -523,6 +561,9 @@ def calculate_duration(
 
     if session_type == "prerequisite_revision":
 
+        if score is None:
+            return min(daily_minutes, 30)
+
         if score < 50:
             return min(daily_minutes, 40)
 
@@ -548,13 +589,20 @@ def calculate_duration(
 # STUDENT PERFORMANCE LOOKUP
 # ---------------------------------------------------------
 
-def build_topic_lookup(gaps, student_memory):
+def build_topic_lookup(
+    gaps,
+    student_memory,
+    topic_difficulties=None,
+):
     """
     Build validated topic performance data.
 
     Priority and status are derived from the score using shared
     production rules. Incoming status and priority labels are
     not trusted.
+
+    Difficulty is accepted only through the database-derived,
+    ownership-verified topic_difficulties mapping.
     """
 
     if not isinstance(gaps, list) or any(
@@ -565,6 +613,12 @@ def build_topic_lookup(gaps, student_memory):
 
     if not isinstance(student_memory, dict):
         raise ValueError("Student memory must be an object.")
+
+    if topic_difficulties is None:
+        topic_difficulties = {}
+
+    if not isinstance(topic_difficulties, dict):
+        raise ValueError("Topic difficulties must be an object.")
 
     topic_lookup = {}
 
@@ -584,8 +638,18 @@ def build_topic_lookup(gaps, student_memory):
         )
 
         # Always derive classification from the actual score.
+        # Difficulty comes only from the ownership-verified database map.
         status = classify_performance(score)
         priority = priority_for_level(status)
+
+        difficulty = topic_difficulties.get(topic_id)
+
+        if (
+            is_positive_integer(difficulty)
+            and difficulty >= 4
+            and score < 70
+        ):
+            priority = "high"
 
         prerequisite_id = gap.get(
             "prerequisite_topic_id"
@@ -641,6 +705,15 @@ def build_topic_lookup(gaps, student_memory):
         status = classify_performance(score)
         priority = priority_for_level(status)
 
+        difficulty = topic_difficulties.get(topic_id)
+
+        if (
+            is_positive_integer(difficulty)
+            and difficulty >= 4
+            and score < 70
+        ):
+            priority = "high"
+
         topic_lookup[topic_id] = {
             "topic_id": topic_id,
             "topic_name": validate_topic_name(
@@ -658,16 +731,16 @@ def build_topic_lookup(gaps, student_memory):
 
 def prerequisite_needs_revision(prerequisite):
     """
-    A prerequisite scoring below 75 needs revision.
+    Unassessed prerequisites need an initial learning session.
+    Assessed prerequisites below 75 need revision.
     """
-
     if not prerequisite:
         return False
 
     score = prerequisite.get("score")
 
     if score is None:
-        return False
+        return True
 
     return validate_score(score) < 75
 
@@ -684,16 +757,14 @@ def create_prerequisite_session(
     learning_preference,
     resources,
 ):
-    """
-    Create a revision session before a dependent topic.
-    """
+    """Create a prerequisite learning or revision session."""
 
     prerequisite_id = prerequisite.get("topic_id")
     prerequisite_name = prerequisite.get("topic_name")
+    prerequisite_score = prerequisite.get("score")
 
-    prerequisite_score = validate_score(
-        prerequisite.get("score", 0)
-    )
+    if prerequisite_score is not None:
+        prerequisite_score = validate_score(prerequisite_score)
 
     prerequisite_resources = get_resources_for_topic(
         resources,
@@ -701,27 +772,38 @@ def create_prerequisite_session(
     )
 
     duration = calculate_duration(
-        priority=prerequisite.get(
-            "priority",
-            "medium",
-        ),
+        priority="high",
         score=prerequisite_score,
         daily_minutes=daily_minutes,
         session_type="prerequisite_revision",
     )
 
-    if prerequisite_score < 50:
-
+    if prerequisite_score is None:
+        reason = (
+            f"{prerequisite_name} has not been assessed yet "
+            f"and is required before {dependent_topic.get('topic_name')}."
+        )
+        objective = (
+            f"Learn the fundamentals of {prerequisite_name} "
+            f"before studying {dependent_topic.get('topic_name')}."
+        )
+    elif prerequisite_score < 50:
         reason = (
             f"{prerequisite_name} is weak and is required "
             f"before {dependent_topic.get('topic_name')}."
         )
-
+        objective = (
+            f"Strengthen {prerequisite_name} before studying "
+            f"{dependent_topic.get('topic_name')}."
+        )
     else:
-
         reason = (
             f"{prerequisite_name} is not yet strong enough "
             f"for {dependent_topic.get('topic_name')}."
+        )
+        objective = (
+            f"Strengthen {prerequisite_name} before studying "
+            f"{dependent_topic.get('topic_name')}."
         )
 
     return {
@@ -734,10 +816,7 @@ def create_prerequisite_session(
         "learning_status": prerequisite.get("status"),
         "session_type": "prerequisite_revision",
         "reason": reason,
-        "learning_objective": (
-            f"Strengthen {prerequisite_name} before studying "
-            f"{dependent_topic.get('topic_name')}."
-        ),
+        "learning_objective": objective,
         "study_activity": create_study_activity(
             topic_name=prerequisite_name,
             score=prerequisite_score,
@@ -749,7 +828,7 @@ def create_prerequisite_session(
             prerequisite_resources
         ),
         "expected_outcome": (
-            f"Improve readiness for "
+            f"Build readiness for "
             f"{dependent_topic.get('topic_name')}."
         ),
     }
@@ -989,20 +1068,64 @@ def study_plan_agent(state):
 
     try:
 
-        owned_topic_ids = get_owned_topic_ids(
-            student_id
+        ownership_result = get_owned_topic_ids(
+            student_id,
+            include_difficulty=True,
         )
 
-        if not isinstance(
-            owned_topic_ids,
-            (set, list, tuple),
-        ):
+        # Production returns owned IDs, difficulty, and topic metadata.
+        # Legacy mocks may still return only the original set.
+        if isinstance(ownership_result, dict):
+            owned_topic_ids = ownership_result.get("topic_ids")
+            topic_difficulties = ownership_result.get(
+                "topic_difficulties",
+                {},
+            )
+            topic_details = ownership_result.get(
+                "topic_details",
+                {},
+            )
+
+            if not isinstance(owned_topic_ids, (set, list, tuple)):
+                raise ValueError("Invalid ownership result.")
+
+            if not isinstance(topic_difficulties, dict):
+                raise ValueError("Invalid topic difficulty result.")
+
+            if not isinstance(topic_details, dict):
+                raise ValueError("Invalid topic metadata.")
+
+        elif isinstance(ownership_result, (set, list, tuple)):
+            owned_topic_ids = ownership_result
+            topic_difficulties = {}
+            topic_details = {}
+
+        else:
             raise ValueError("Invalid ownership result.")
 
         owned_topic_ids = {
             topic_id
             for topic_id in owned_topic_ids
             if is_positive_integer(topic_id)
+        }
+
+        # Keep only valid difficulty records for owned topics.
+        topic_difficulties = {
+            topic_id: difficulty
+            for topic_id, difficulty in topic_difficulties.items()
+            if (
+                topic_id in owned_topic_ids
+                and is_positive_integer(difficulty)
+            )
+        }
+
+        topic_details = {
+            topic_id: details
+            for topic_id, details in topic_details.items()
+            if (
+                topic_id in owned_topic_ids
+                and isinstance(details, dict)
+            )
         }
 
     except Exception:
@@ -1043,7 +1166,39 @@ def study_plan_agent(state):
         topic_lookup = build_topic_lookup(
             gaps,
             student_memory,
+            topic_difficulties=topic_difficulties,
         )
+
+        # Add owned prerequisites without performance records.
+        # An unassessed topic must retain score=None, not score=0.
+        for gap in gaps:
+            prerequisite_id = gap.get("prerequisite_topic_id")
+
+            if (
+                prerequisite_id is None
+                or prerequisite_id not in owned_topic_ids
+                or prerequisite_id in topic_lookup
+            ):
+                continue
+
+            details = topic_details.get(prerequisite_id)
+
+            if not isinstance(details, dict):
+                continue
+
+            topic_lookup[prerequisite_id] = {
+                "topic_id": prerequisite_id,
+                "topic_name": validate_topic_name(
+                    details.get("topic_name"),
+                    prerequisite_id,
+                ),
+                "score": None,
+                "status": "not_assessed",
+                "priority": "high",
+                "prerequisite_topic_id": details.get(
+                    "prerequisite_topic_id"
+                ),
+            }
 
     except (
         ValueError,
@@ -1061,10 +1216,22 @@ def study_plan_agent(state):
     # 7. CHECK PREREQUISITE CYCLES
     # -----------------------------------------------------
 
-    if has_prerequisite_cycle(gaps):
+    try:
+        if has_prerequisite_cycle(gaps):
+            return stop_workflow(
+                "Circular prerequisite relationship detected.",
+                student_id,
+            )
+
+    except Exception as exc:
+        print(
+            "[Study Plan Agent] "
+            "Prerequisite cycle detection failed: "
+            f"{type(exc).__name__}"
+        )
 
         return stop_workflow(
-            "Circular prerequisite relationship detected.",
+            "Could not validate prerequisite relationships.",
             student_id,
         )
 
@@ -1119,147 +1286,160 @@ def study_plan_agent(state):
     # 9. GENERATE STUDY SESSIONS
     # -----------------------------------------------------
 
-    sessions = []
+    try:
+        sessions = []
 
-    scheduled_topic_ids = set()
+        scheduled_topic_ids = set()
 
-    current_date = datetime.now().date()
+        current_date = datetime.now().date()
 
-    for gap in selected_topics:
+        for gap in selected_topics:
 
-        topic_id = gap["topic_id"]
+            topic_id = gap["topic_id"]
 
-        # Defensive ownership check before scheduling.
-        if topic_id not in owned_topic_ids:
-
-            print(
-                "[Study Plan Agent] "
-                f"Skipping unowned target topic: {topic_id}"
-            )
-
-            continue
-
-        if topic_id in scheduled_topic_ids:
-            continue
-
-        topic = topic_lookup[topic_id]
-
-        # -------------------------------------------------
-        # 10. CHECK PREREQUISITE
-        # -------------------------------------------------
-
-        prerequisite_id = topic.get(
-            "prerequisite_topic_id"
-        )
-
-        prerequisite = (
-            topic_lookup.get(prerequisite_id)
-            if prerequisite_id is not None
-            else None
-        )
-
-        if prerequisite is not None:
-
-            if prerequisite_needs_revision(prerequisite):
-
-                prerequisite_id = prerequisite.get(
-                    "topic_id"
-                )
-
-                # Ensure prerequisite belongs to this student.
-                if prerequisite_id not in owned_topic_ids:
-
-                    print(
-                        "[Study Plan Agent] "
-                        f"Skipping foreign prerequisite: "
-                        f"{prerequisite_id}"
-                    )
-
-                elif prerequisite_id not in scheduled_topic_ids:
-
-                    prerequisite_date = (
-                        current_date
-                        + timedelta(days=len(sessions))
-                    )
-
-                    prerequisite_session = (
-                        create_prerequisite_session(
-                            prerequisite=prerequisite,
-                            dependent_topic=topic,
-                            date=prerequisite_date,
-                            daily_minutes=daily_minutes,
-                            learning_preference=learning_preference,
-                            resources=resources,
-                        )
-                    )
-
-                    sessions.append(
-                        prerequisite_session
-                    )
-
-                    scheduled_topic_ids.add(
-                        prerequisite_id
-                    )
-
-                    print(
-                        "[Study Plan Agent] "
-                        "Prerequisite session: "
-                        f"{prerequisite.get('topic_name')} "
-                        f"before {topic.get('topic_name')}"
-                    )
-
-            else:
+            # Defensive ownership check before scheduling.
+            if topic_id not in owned_topic_ids:
 
                 print(
                     "[Study Plan Agent] "
-                    "Prerequisite satisfied: "
-                    f"{prerequisite.get('topic_name')} "
-                    f"score = {prerequisite.get('score')}"
+                    f"Skipping unowned target topic: {topic_id}"
                 )
 
-        # -------------------------------------------------
-        # 11. CREATE TARGET SESSION
-        # -------------------------------------------------
+                continue
 
-        target_date = (
-            current_date
-            + timedelta(days=len(sessions))
-        )
+            if topic_id in scheduled_topic_ids:
+                continue
 
-        target_session = create_target_session(
-            topic=topic,
-            date=target_date,
-            daily_minutes=daily_minutes,
-            learning_preference=learning_preference,
-            resources=resources,
-        )
+            topic = topic_lookup[topic_id]
 
-        sessions.append(
-            target_session
-        )
+            # -------------------------------------------------
+            # 10. CHECK PREREQUISITE
+            # -------------------------------------------------
 
-        scheduled_topic_ids.add(
-            topic_id
-        )
-
-        print(
-            "[Study Plan Agent] Target session: "
-            f"{topic.get('topic_name')} | "
-            f"{target_session['duration_minutes']} min | "
-            f"{topic.get('priority')}"
-        )
-
-        print(
-            "[Study Plan Agent] Learning objective: "
-            f"{target_session['learning_objective']}"
-        )
-
-        print(
-            "[Study Plan Agent] Resource sections: "
-            + ", ".join(
-                item.get("section_title") or "Untitled"
-                for item in target_session["resources"]
+            prerequisite_id = topic.get(
+                "prerequisite_topic_id"
             )
+
+            prerequisite = (
+                topic_lookup.get(prerequisite_id)
+                if prerequisite_id is not None
+                else None
+            )
+
+            if prerequisite is not None:
+
+                if prerequisite_needs_revision(prerequisite):
+
+                    prerequisite_id = prerequisite.get(
+                        "topic_id"
+                    )
+
+                    # Ensure prerequisite belongs to this student.
+                    if prerequisite_id not in owned_topic_ids:
+
+                        print(
+                            "[Study Plan Agent] "
+                            f"Skipping foreign prerequisite: "
+                            f"{prerequisite_id}"
+                        )
+
+                    elif prerequisite_id not in scheduled_topic_ids:
+
+                        prerequisite_date = (
+                            current_date
+                            + timedelta(days=len(sessions))
+                        )
+
+                        prerequisite_session = (
+                            create_prerequisite_session(
+                                prerequisite=prerequisite,
+                                dependent_topic=topic,
+                                date=prerequisite_date,
+                                daily_minutes=daily_minutes,
+                                learning_preference=learning_preference,
+                                resources=resources,
+                            )
+                        )
+
+                        sessions.append(
+                            prerequisite_session
+                        )
+
+                        scheduled_topic_ids.add(
+                            prerequisite_id
+                        )
+
+                        print(
+                            "[Study Plan Agent] "
+                            "Prerequisite session: "
+                            f"{prerequisite.get('topic_name')} "
+                            f"before {topic.get('topic_name')}"
+                        )
+
+                else:
+
+                    print(
+                        "[Study Plan Agent] "
+                        "Prerequisite satisfied: "
+                        f"{prerequisite.get('topic_name')} "
+                        f"score = {prerequisite.get('score')}"
+                    )
+
+            # -------------------------------------------------
+            # 11. CREATE TARGET SESSION
+            # -------------------------------------------------
+
+            target_date = (
+                current_date
+                + timedelta(days=len(sessions))
+            )
+
+            target_session = create_target_session(
+                topic=topic,
+                date=target_date,
+                daily_minutes=daily_minutes,
+                learning_preference=learning_preference,
+                resources=resources,
+            )
+
+            sessions.append(
+                target_session
+            )
+
+            scheduled_topic_ids.add(
+                topic_id
+            )
+
+            print(
+                "[Study Plan Agent] Target session: "
+                f"{topic.get('topic_name')} | "
+                f"{target_session['duration_minutes']} min | "
+                f"{topic.get('priority')}"
+            )
+
+            print(
+                "[Study Plan Agent] Learning objective: "
+                f"{target_session['learning_objective']}"
+            )
+
+            print(
+                "[Study Plan Agent] Resource sections: "
+                + ", ".join(
+                    item.get("section_title") or "Untitled"
+                    for item in target_session["resources"]
+                )
+            )
+
+    except Exception as exc:
+        print(
+            "[Study Plan Agent] "
+            "Study session generation failed: "
+            f"{type(exc).__name__}"
+        )
+
+        return stop_workflow(
+            "Could not generate the study plan.",
+            student_id,
         )
 
     # -----------------------------------------------------

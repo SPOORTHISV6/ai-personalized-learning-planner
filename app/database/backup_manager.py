@@ -1,4 +1,3 @@
-
 import logging
 import re
 import shutil
@@ -10,8 +9,13 @@ from pathlib import Path
 
 from sqlalchemy.engine import make_url
 
-from app.core.config import get_database_url
+from app.core.config import get_backup_database_url
 
+from app.database.backup_encryption import (
+    get_encryption_key,
+    encrypt_file,
+    decrypt_file,
+)
 
 # --------------------------------------------------
 # CONFIGURATION
@@ -26,7 +30,6 @@ EXPECTED_DATABASE = "ai_learning_planner"
 
 DUMP_TIMEOUT_SECONDS = 3600
 
-# Keep backups from the latest 7 distinct dates.
 RETENTION_DAYS = 7
 
 
@@ -110,19 +113,18 @@ def create_mysql_option_file(url):
 
 
 # --------------------------------------------------
-# BACKUP VERIFICATION
+# SQL BACKUP VERIFICATION
 # --------------------------------------------------
 
 def verify_backup(path: Path):
     """
-    Perform basic integrity checks on the generated SQL dump.
+    Perform basic integrity checks on a generated SQL dump.
 
-    Checks:
-    1. Backup file exists.
-    2. Backup file is not empty.
-    3. CREATE TABLE statements exist.
-    4. MySQL dump completion marker exists.
+    The file is scanned line by line to avoid loading the
+    complete database dump into memory.
     """
+
+    path = Path(path)
 
     if not path.exists():
         raise RuntimeError("Backup file was not created.")
@@ -132,32 +134,41 @@ def verify_backup(path: Path):
     if size == 0:
         raise RuntimeError("Backup file is empty.")
 
-    content = path.read_bytes()
+    create_count = 0
+    insert_count = 0
+    completion_marker_found = False
 
-    create_count = len(
-        re.findall(
-            rb"CREATE\s+TABLE",
-            content,
-            re.IGNORECASE
-        )
+    create_pattern = re.compile(
+        rb"CREATE\s+TABLE",
+        re.IGNORECASE
     )
 
-    insert_count = len(
-        re.findall(
-            rb"INSERT\s+INTO",
-            content,
-            re.IGNORECASE
-        )
+    insert_pattern = re.compile(
+        rb"INSERT\s+INTO",
+        re.IGNORECASE
     )
 
-    completion_marker = b"-- Dump completed on"
+    with path.open("rb") as backup_file:
+
+        for line in backup_file:
+
+            create_count += len(
+                create_pattern.findall(line)
+            )
+
+            insert_count += len(
+                insert_pattern.findall(line)
+            )
+
+            if b"-- Dump completed on" in line:
+                completion_marker_found = True
 
     if create_count == 0:
         raise RuntimeError(
             "No CREATE TABLE statements found."
         )
 
-    if completion_marker not in content:
+    if not completion_marker_found:
         raise RuntimeError(
             "MySQL dump completion marker is missing."
         )
@@ -170,7 +181,63 @@ def verify_backup(path: Path):
 
 
 # --------------------------------------------------
-# BACKUP RETENTION
+# ENCRYPTED BACKUP VALIDATION
+# --------------------------------------------------
+
+def verify_encrypted_backup(path: Path):
+    """
+    Validate the encrypted backup container.
+
+    Authentication and SQL structure are checked separately
+    by decrypting into a temporary verification file.
+    """
+
+    from app.database.backup_encryption import (
+        MAGIC_HEADER,
+        NONCE_SIZE,
+        TAG_SIZE,
+    )
+
+    path = Path(path)
+
+    if not path.is_file():
+        raise RuntimeError(
+            "Encrypted backup file was not created."
+        )
+
+    size = path.stat().st_size
+
+    minimum_size = (
+        len(MAGIC_HEADER)
+        + NONCE_SIZE
+        + TAG_SIZE
+        + 1
+    )
+
+    if size < minimum_size:
+        raise RuntimeError(
+            "Encrypted backup file is incomplete."
+        )
+
+    with path.open("rb") as encrypted_file:
+        header = encrypted_file.read(
+            len(MAGIC_HEADER)
+        )
+
+    if header != MAGIC_HEADER:
+        raise RuntimeError(
+            "Encrypted backup header is invalid."
+        )
+
+    return {
+        "size": size,
+        "format": "AES-256-GCM",
+        "authenticated": False,
+    }
+
+
+# --------------------------------------------------
+# LOCAL BACKUP RETENTION
 # --------------------------------------------------
 
 def apply_retention(
@@ -178,14 +245,20 @@ def apply_retention(
     keep_days=RETENTION_DAYS
 ):
     """
-    Retain backups from the latest seven distinct backup dates.
+    Retain encrypted backups from the latest distinct dates.
 
-    Multiple backups created on a retained date are preserved.
-    Files with unexpected names are ignored.
+    Legacy plaintext .sql backups are intentionally ignored.
+    They will not be automatically deleted during migration.
     """
 
-    if keep_days < 1:
-        raise ValueError("keep_days must be at least 1.")
+    if (
+        not isinstance(keep_days, int)
+        or isinstance(keep_days, bool)
+        or keep_days < 1
+    ):
+        raise ValueError(
+            "keep_days must be an integer of at least 1."
+        )
 
     if not backup_dir.exists():
         logging.info(
@@ -194,13 +267,14 @@ def apply_retention(
         return 0
 
     pattern = re.compile(
-        rf"{re.escape(EXPECTED_DATABASE)}_(\d{{8}})_\d{{6}}\.sql"
+        rf"{re.escape(EXPECTED_DATABASE)}_"
+        rf"(\d{{8}})_\d{{6}}\.sql\.enc"
     )
 
     dated_backups = []
 
     for path in backup_dir.glob(
-        f"{EXPECTED_DATABASE}_*.sql"
+        f"{EXPECTED_DATABASE}_*.sql.enc"
     ):
 
         match = pattern.fullmatch(path.name)
@@ -229,7 +303,7 @@ def apply_retention(
                 path.unlink()
 
                 logging.info(
-                    "Expired backup deleted: %s",
+                    "Expired encrypted backup deleted: %s",
                     path.name
                 )
 
@@ -238,13 +312,14 @@ def apply_retention(
             except OSError:
 
                 logging.warning(
-                    "Could not delete expired backup: %s",
+                    "Could not delete expired encrypted backup: %s",
                     path.name,
                     exc_info=True
                 )
 
     logging.info(
-        "Retention completed. Retained backup dates: %s; deleted files: %s",
+        "Encrypted retention completed. "
+        "Retained dates: %s; deleted files: %s",
         len(retained_dates),
         deleted
     )
@@ -258,10 +333,15 @@ def apply_retention(
 
 def create_backup():
     """
-    Create and verify a timestamped MySQL database backup.
+    Create an encrypted MySQL database backup.
 
-    The final backup filename is published only after
-    mysqldump succeeds and verification passes.
+    Plaintext SQL is temporary and is removed after:
+    1. SQL structure verification.
+    2. Encryption.
+    3. Successful authenticated decryption.
+    4. Verification of the decrypted SQL.
+
+    Only the encrypted .sql.enc file is published.
     """
 
     BACKUP_DIR.mkdir(
@@ -269,55 +349,69 @@ def create_backup():
         exist_ok=True
     )
 
-    url = make_url(
-        get_database_url()
-    )
+    url = make_url(get_backup_database_url())
 
-    # Validate database driver.
     if url.drivername != "mysql+pymysql":
-
         raise RuntimeError(
             "Expected mysql+pymysql database driver."
         )
 
-    # Validate database name.
     if url.database != EXPECTED_DATABASE:
-
         raise RuntimeError(
             f"Refusing to back up unexpected database: {url.database}"
         )
 
-    # Locate mysqldump.
     mysqldump = shutil.which("mysqldump")
 
     if not mysqldump:
-
         raise RuntimeError(
             "mysqldump was not found in PATH."
         )
+
+    # Fail before creating a plaintext dump if the key is invalid.
+    encryption_key = get_encryption_key()
 
     timestamp = datetime.now().strftime(
         "%Y%m%d_%H%M%S"
     )
 
-    final_path = (
-        BACKUP_DIR /
-        f"{EXPECTED_DATABASE}_{timestamp}.sql"
+    base_name = (
+        f"{EXPECTED_DATABASE}_{timestamp}"
     )
 
-    partial_path = final_path.with_suffix(
-        ".sql.partial"
+    final_path = (
+        BACKUP_DIR / f"{base_name}.sql.enc"
+    )
+
+    sql_partial_path = (
+        BACKUP_DIR / f"{base_name}.sql.partial"
+    )
+
+    encrypted_partial_path = (
+        BACKUP_DIR / f"{base_name}.sql.enc.partial"
+    )
+
+    verification_path = (
+        BACKUP_DIR / f"{base_name}.verify.sql"
     )
 
     option_file = None
 
-    if final_path.exists() or partial_path.exists():
+    all_paths = [
+        final_path,
+        sql_partial_path,
+        encrypted_partial_path,
+        verification_path,
+    ]
 
+    if any(path.exists() for path in all_paths):
         raise RuntimeError(
             "Backup filename already exists."
         )
 
-    logging.info("Starting database backup.")
+    logging.info(
+        "Starting encrypted database backup."
+    )
 
     logging.info(
         "Database: %s",
@@ -326,10 +420,8 @@ def create_backup():
 
     try:
 
-        # Create temporary MySQL credentials file.
         option_file = create_mysql_option_file(url)
 
-        # mysqldump command.
         command = [
             mysqldump,
             f"--defaults-extra-file={option_file}",
@@ -345,8 +437,7 @@ def create_backup():
             "Executing mysqldump."
         )
 
-        # Write dump to a temporary file.
-        with partial_path.open("wb") as output_file:
+        with sql_partial_path.open("wb") as output_file:
 
             result = subprocess.run(
                 command,
@@ -359,92 +450,156 @@ def create_backup():
                 check=False,
             )
 
-        # Check mysqldump result.
         if result.returncode != 0:
-
             raise RuntimeError(
                 "mysqldump failed: "
                 + (result.stderr or "Unknown error")
             )
 
-        # Verify generated SQL file.
-        verification = verify_backup(
-            partial_path
+        # Step 1: Verify plaintext SQL structure.
+        sql_verification = verify_backup(
+            sql_partial_path
         )
 
-        # Publish only a verified backup.
-        partial_path.replace(
+        logging.info(
+            "Plaintext SQL structure verified."
+        )
+
+        # Step 2: Encrypt the SQL dump.
+        encryption_result = encrypt_file(
+            source=sql_partial_path,
+            destination=encrypted_partial_path,
+            key=encryption_key,
+        )
+
+        logging.info(
+            "Backup encryption completed."
+        )
+
+        # Step 3: Verify the encrypted container.
+        verify_encrypted_backup(
+            encrypted_partial_path
+        )
+
+        # Step 4: Decrypt into a temporary verification file.
+        decryption_result = decrypt_file(
+            source=encrypted_partial_path,
+            destination=verification_path,
+            key=encryption_key,
+        )
+
+        # Step 5: Verify decrypted SQL structure again.
+        decrypted_verification = verify_backup(
+            verification_path
+        )
+
+        if (
+            decrypted_verification["size"]
+            != sql_verification["size"]
+        ):
+            raise RuntimeError(
+                "Decrypted backup size does not match the original SQL dump."
+            )
+
+        if (
+            decrypted_verification["tables"]
+            != sql_verification["tables"]
+        ):
+            raise RuntimeError(
+                "Decrypted backup table count does not match."
+            )
+
+        if (
+            decrypted_verification["insert_statements"]
+            != sql_verification["insert_statements"]
+        ):
+            raise RuntimeError(
+                "Decrypted backup INSERT count does not match."
+            )
+
+        # Step 6: Publish the encrypted backup.
+        encrypted_partial_path.rename(
             final_path
         )
 
         logging.info(
-            "Backup completed successfully."
-        )
-
-        logging.info(
-            "File: %s",
+            "Encrypted backup published successfully: %s",
             final_path.name
         )
 
         logging.info(
-            "Size: %s bytes",
-            verification["size"]
+            "Original SQL size: %s bytes",
+            sql_verification["size"]
         )
 
         logging.info(
-            "Tables: %s",
-            verification["tables"]
+            "Encrypted size: %s bytes",
+            encryption_result["encrypted_size"]
         )
 
         logging.info(
-            "INSERT statements: %s",
-            verification["insert_statements"]
+            "Tables verified: %s",
+            sql_verification["tables"]
         )
 
-        # Apply retention after successful backup.
-        # Retention failure must not invalidate the backup.
+        logging.info(
+            "INSERT statements verified: %s",
+            sql_verification["insert_statements"]
+        )
+
+        logging.info(
+            "Authenticated decryption verification: SUCCESS"
+        )
+
+        # Retention runs only after successful publication.
         try:
-
             apply_retention()
 
         except Exception:
-
             logging.exception(
-                "Backup retention encountered an error."
+                "Encrypted backup retention encountered an error."
             )
 
         return final_path
 
     except Exception:
 
-        # Remove incomplete backup.
-        if partial_path.exists():
-
-            try:
-                partial_path.unlink()
-
-            except OSError:
-
-                logging.exception(
-                    "Could not remove incomplete backup file."
-                )
+        # Never leave the final encrypted name on failure.
+        if final_path.exists():
+            final_path.unlink(missing_ok=True)
 
         logging.exception(
-            "Database backup failed."
+            "Encrypted database backup failed."
         )
 
         raise
 
     finally:
 
-        # Remove temporary credentials file.
+        # Remove all temporary plaintext and encrypted files.
+        for temporary_path in (
+            sql_partial_path,
+            encrypted_partial_path,
+            verification_path,
+        ):
+
+            if temporary_path.exists():
+
+                try:
+                    temporary_path.unlink()
+
+                except OSError:
+                    logging.exception(
+                        "Could not remove temporary backup file: %s",
+                        temporary_path.name
+                    )
+
         if option_file and option_file.exists():
 
             try:
                 option_file.unlink()
 
             except OSError:
-
                 logging.exception(
                     "Could not remove temporary MySQL credentials file."
                 )
@@ -458,104 +613,56 @@ def main():
 
     configure_logging()
 
-    # ========================================================
-    # STEP 1: CREATE LOCAL DATABASE BACKUP
-    # ========================================================
-
+    # Step 1: Create the local encrypted backup.
     try:
 
         backup_path = create_backup()
 
         print("\nLOCAL BACKUP RESULT: SUCCESS")
-        print("Backup file:", backup_path)
+        print("Encrypted backup file:", backup_path)
 
     except Exception as exc:
 
-        logging.exception("Local database backup failed.")
+        logging.exception(
+            "Local encrypted database backup failed."
+        )
 
         print("\nLOCAL BACKUP RESULT: FAILED")
         print("Reason:", exc)
 
         raise SystemExit(1)
 
-    # ========================================================
-    # STEP 2: CHECK OAUTH HEALTH AND UPLOAD TO GOOGLE DRIVE
-    # ========================================================
-
+    # Step 2: Upload the verified encrypted backup to Google Drive.
     try:
 
-        from app.database.google_drive_backup import (
-            check_oauth_health,
-            upload_backup
-        )
+        from app.database.encrypted_google_drive_backup import upload_backup
 
-        # Inspect OAuth status without refreshing the token.
-        oauth_health = check_oauth_health()
-
-        print("\nGOOGLE DRIVE OAUTH HEALTH")
-        print("Status:", oauth_health["status"])
-        print(
-            "Refresh token present:",
-            oauth_health["refresh_token_present"]
-        )
-        print(
-            "Access token valid:",
-            oauth_health["access_token_valid"]
-        )
-        print("Message:", oauth_health["message"])
-
-        logging.info(
-            "OAuth health before cloud upload: %s",
-            oauth_health["status"]
-        )
-
-        # Continue with the existing upload operation.
         cloud_result = upload_backup(backup_path)
-
-        logging.info(
-            "Google Drive backup completed: %s",
-            cloud_result["file_name"]
-        )
-
         print("\nCLOUD BACKUP RESULT: SUCCESS")
-        print("Drive file:", cloud_result["file_name"])
-        print("Drive file ID:", cloud_result["file_id"])
-        print("SHA256:", cloud_result["sha256"])
+        print("Google Drive file ID:", cloud_result["file_id"])
+        print("Cloud backup filename:", cloud_result["file_name"])
+        print("SHA-256:", cloud_result["sha256"])
 
-        # Use .get() so older test mocks or optional fields
-        # do not cause KeyError.
-        retention_result = cloud_result.get("cloud_retention")
-
-        if retention_result is not None:
-            print("Cloud retention:", retention_result)
+        if cloud_result.get("already_exists"):
+            print("Cloud backup status: Already existed")
         else:
-            print("Cloud retention: Not reported")
-
-        already_exists = cloud_result.get(
-            "already_exists",
-            False
-        )
-
-        if already_exists:
-            print("Upload status: Existing identical backup reused.")
-        else:
-            print("Upload status: New backup uploaded.")
+            print("Cloud backup status: Uploaded successfully")
 
         print("\nBACKUP RESULT: LOCAL AND CLOUD SUCCESS")
 
     except Exception as exc:
 
         logging.exception(
-            "Google Drive upload failed. "
-            "The verified local backup remains available."
+            "Encrypted Google Drive backup failed."
         )
 
         print("\nCLOUD BACKUP RESULT: FAILED")
         print("Reason:", exc)
-        print("LOCAL BACKUP RESULT: SUCCESS")
 
-        # Exit code 2 means local backup succeeded,
-        # but cloud backup or its retention operation failed.
+        print(
+            "\nLOCAL BACKUP RESULT: PRESERVED"
+        )
+
         raise SystemExit(2)
 
 

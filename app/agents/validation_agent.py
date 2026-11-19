@@ -1,3 +1,4 @@
+
 import logging
 import math
 import re
@@ -74,18 +75,26 @@ def _validate_daily_hours(value):
     if isinstance(value, bool):
         return None
 
-    if not isinstance(value, (int, float)):
-        return None
+    if isinstance(value, int):
 
-    hours = float(value)
+        # Check the integer range before float conversion.
+        # This also safely handles extremely large integers.
+        if not 0 < value <= MAX_DAILY_HOURS:
+            return None
 
-    if not math.isfinite(hours):
-        return None
+        return float(value)
 
-    if not 0 < hours <= MAX_DAILY_HOURS:
-        return None
+    if isinstance(value, float):
 
-    return hours
+        if not math.isfinite(value):
+            return None
+
+        if not 0 < value <= MAX_DAILY_HOURS:
+            return None
+
+        return value
+
+    return None
 
 
 def _validate_topic_name(value):
@@ -156,6 +165,9 @@ def get_owned_topic_ids(student_id, topic_ids):
     """
     Fetch topic IDs belonging to subjects owned by the
     specified student.
+
+    Database cleanup failures must not override the
+    ownership query result.
     """
 
     student_id = _parse_positive_id(student_id)
@@ -201,7 +213,16 @@ def get_owned_topic_ids(student_id, topic_ids):
         }
 
     finally:
-        db.close()
+
+        try:
+            db.close()
+
+        except Exception as exc:
+            logger.warning(
+                "[Validation Agent] "
+                "Database cleanup failed: %s",
+                type(exc).__name__,
+            )
 
 
 # =========================================================

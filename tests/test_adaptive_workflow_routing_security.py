@@ -1,3 +1,4 @@
+
 import unittest
 from unittest.mock import patch
 
@@ -45,6 +46,57 @@ class TestAdaptiveWorkflowRoutingSecurity(unittest.TestCase):
                 "student_id": 1,
                 "quiz_result_id": 102,
             })
+
+        self.assertEqual(result["next_action"], "stop")
+
+    def test_reflection_missing_action_stops_workflow(self):
+        with patch.object(
+            workflow_module,
+            "evaluation_agent",
+            return_value={
+                "evaluation": {"level": "weak"},
+                "next_action": "reflection",
+            },
+        ), patch.object(
+            workflow_module,
+            "reflection_agent",
+            return_value={
+                "reflection": {
+                    "reason": "Insufficient performance data."
+                },
+            },
+        ), patch.object(
+            workflow_module,
+            "memory_agent",
+        ) as mock_memory:
+            graph = workflow_module.build_adaptive_workflow()
+
+            result = graph.invoke({
+                "student_id": 1,
+                "quiz_result_id": 104,
+            })
+
+        self.assertEqual(result["next_action"], "stop")
+        mock_memory.assert_not_called()
+
+    def test_reflection_router_defaults_missing_action_to_stop(self):
+        result = workflow_module.route_reflection({
+            "reflection": {
+                "reason": "Missing action."
+            }
+        })
+
+        self.assertEqual(result, "stop")
+
+    def test_sanitizer_explicitly_sets_missing_action_to_stop(self):
+        result = workflow_module._sanitize_agent_result(
+            {
+                "reflection": {
+                    "reason": "Missing action."
+                }
+            },
+            {"replan", "complete", "stop"},
+        )
 
         self.assertEqual(result["next_action"], "stop")
 

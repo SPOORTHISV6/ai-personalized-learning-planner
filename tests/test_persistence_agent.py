@@ -226,9 +226,9 @@ class TestPersistenceAgent(unittest.TestCase):
             end_date=date(2026, 10, 15),
             status="active",
         )
-
         existing_item = SimpleNamespace(
             item_id=501,
+            plan_id=50,  # Must match existing_plan.plan_id
             topic_id=3,
             scheduled_date=date(2026, 10, 15),
             duration_minutes=60,

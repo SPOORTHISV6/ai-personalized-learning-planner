@@ -1,3 +1,4 @@
+
 from datetime import datetime, timedelta
 from uuid import uuid4
 
@@ -38,6 +39,7 @@ def override_get_db():
 
 
 class TestAPIRoutes:
+
     @classmethod
     def setup_class(cls):
         verify_test_database()
@@ -137,19 +139,102 @@ class TestAPIRoutes:
         self.topic_id = self.topic.topic_id
         self.item_id = self.item.item_id
 
+        # Track additional students created by ownership tests.
+        self.additional_student_ids = []
+
+    def create_other_student_with_plan(self):
+        """Create a second student and a plan owned by that student."""
+
+        other_student = Student(
+            name="Another API Student",
+            email=f"other_plan_{uuid4().hex}@example.com",
+            daily_available_hours=3.0,
+            learning_preference="Reading",
+        )
+
+        self.db.add(other_student)
+        self.db.flush()
+
+        now = datetime.now().replace(microsecond=0)
+
+        other_plan = StudyPlan(
+            student_id=other_student.student_id,
+            start_date=now,
+            end_date=now + timedelta(days=7),
+            status="active",
+        )
+
+        self.db.add(other_plan)
+        self.db.commit()
+
+        self.db.refresh(other_student)
+        self.db.refresh(other_plan)
+
+        self.additional_student_ids.append(
+            other_student.student_id
+        )
+
+        return other_student, other_plan
+
+    def create_other_student_with_topic(self):
+        """Create another student with an independently owned topic."""
+
+        other_student = Student(
+            name="Foreign Performance Student",
+            email=f"foreign_performance_{uuid4().hex}@example.com",
+            daily_available_hours=3.0,
+            learning_preference="Reading",
+        )
+
+        self.db.add(other_student)
+        self.db.flush()
+
+        other_subject = Subject(
+            student_id=other_student.student_id,
+            subject_name="Foreign DBMS",
+            importance=3,
+        )
+
+        self.db.add(other_subject)
+        self.db.flush()
+
+        other_topic = Topic(
+            subject_id=other_subject.subject_id,
+            topic_name="Foreign Topic",
+            difficulty=3,
+        )
+
+        self.db.add(other_topic)
+        self.db.commit()
+        self.db.refresh(other_topic)
+
+        self.additional_student_ids.append(
+            other_student.student_id
+        )
+
+        return other_student, other_topic
+
     def teardown_method(self):
         """Remove test records in foreign-key dependency order."""
+
         try:
             self.db.rollback()
             self.db.expire_all()
 
-            # Find all plans created for this test student.
+            # Include the main test student and any additional students
+            # created by ownership tests.
+            student_ids = (
+                [self.student_id]
+                + self.additional_student_ids
+            )
+
+            # Find all plans created for these test students.
             plan_ids = [
                 row[0]
                 for row in (
                     self.db.query(StudyPlan.plan_id)
                     .filter(
-                        StudyPlan.student_id == self.student_id
+                        StudyPlan.student_id.in_(student_ids)
                     )
                     .all()
                 )
@@ -165,20 +250,21 @@ class TestAPIRoutes:
                     StudyPlan.plan_id.in_(plan_ids)
                 ).delete(synchronize_session=False)
 
-            # Find subjects belonging to this student.
+            # Find subjects belonging to these test students.
             subject_ids = [
                 row[0]
                 for row in (
                     self.db.query(Subject.subject_id)
                     .filter(
-                        Subject.student_id == self.student_id
+                        Subject.student_id.in_(student_ids)
                     )
                     .all()
                 )
             ]
 
-            # Find topics belonging to this student's subjects.
+            # Find topics belonging to these students' subjects.
             topic_ids = []
+
             if subject_ids:
                 topic_ids = [
                     row[0]
@@ -192,9 +278,9 @@ class TestAPIRoutes:
                 ]
 
             # Delete performance records before deleting topics
-            # or the student because they reference both.
+            # or students because they reference both.
             self.db.query(Performance).filter(
-                Performance.student_id == self.student_id
+                Performance.student_id.in_(student_ids)
             ).delete(synchronize_session=False)
 
             # Delete topics before their parent subjects.
@@ -208,9 +294,9 @@ class TestAPIRoutes:
                     Subject.subject_id.in_(subject_ids)
                 ).delete(synchronize_session=False)
 
-            # Remove the main test student.
+            # Remove all test students.
             self.db.query(Student).filter(
-                Student.student_id == self.student_id
+                Student.student_id.in_(student_ids)
             ).delete(synchronize_session=False)
 
             self.db.commit()
@@ -262,6 +348,7 @@ class TestAPIRoutes:
         assert response.status_code == 201
 
         body = response.json()
+
         assert body["name"] == "New API Student"
         assert body["email"] == email
         assert body["student_id"] is not None
@@ -390,7 +477,7 @@ class TestAPIRoutes:
 
         finally:
             verification_db.close()
-    
+
     def test_create_performance_rejects_negative_score(self):
         response = self.client.post(
             "/performance/",
@@ -482,6 +569,7 @@ class TestAPIRoutes:
                 score=75.0,
             )
         )
+
         self.db.commit()
 
         response = self.client.get(
@@ -515,6 +603,7 @@ class TestAPIRoutes:
                 score=82.0,
             )
         )
+
         self.db.commit()
 
         response = self.client.get(
@@ -541,6 +630,121 @@ class TestAPIRoutes:
         assert response.json()["detail"] == "Topic not found."
 
     # ---------------------------------------------------------
+    # PERFORMANCE API SECURITY TESTS
+    # ---------------------------------------------------------
+
+    def test_cannot_create_performance_for_another_students_topic(self):
+        _, other_topic = self.create_other_student_with_topic()
+
+        response = self.client.post(
+            "/performance/",
+            json={
+                "student_id": self.student_id,
+                "topic_id": other_topic.topic_id,
+                "score": 85.0,
+            },
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Topic not found."
+
+    def test_student_performance_excludes_foreign_records(self):
+        other_student, _ = self.create_other_student_with_topic()
+
+        # Deliberately create a record owned by another student
+        # for the authenticated student's topic.
+        foreign_performance = Performance(
+            student_id=other_student.student_id,
+            topic_id=self.topic_id,
+            score=35.0,
+        )
+
+        self.db.add(foreign_performance)
+        self.db.commit()
+
+        response = self.client.get(
+            f"/performance/student/{self.student_id}"
+        )
+
+        assert response.status_code == 200
+
+        records = response.json()
+
+        assert all(
+            record["student_id"] == self.student_id
+            for record in records
+        )
+
+    def test_topic_performance_excludes_foreign_records(self):
+        other_student, _ = self.create_other_student_with_topic()
+
+        # Same topic, different student ownership.
+        self.db.add(
+            Performance(
+                student_id=other_student.student_id,
+                topic_id=self.topic_id,
+                score=25.0,
+            )
+        )
+
+        self.db.add(
+            Performance(
+                student_id=self.student_id,
+                topic_id=self.topic_id,
+                score=85.0,
+            )
+        )
+
+        self.db.commit()
+
+        response = self.client.get(
+            f"/performance/topic/{self.topic_id}"
+        )
+
+        assert response.status_code == 200
+
+        records = response.json()
+
+        assert len(records) == 1
+        assert records[0]["student_id"] == self.student_id
+        assert records[0]["score"] == 85.0
+
+    def test_cannot_access_another_students_topic_performance(self):
+        _, other_topic = self.create_other_student_with_topic()
+
+        response = self.client.get(
+            f"/performance/topic/{other_topic.topic_id}"
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Topic not found."
+
+    def test_create_performance_rejects_unexpected_fields(self):
+        response = self.client.post(
+            "/performance/",
+            json={
+                "student_id": self.student_id,
+                "topic_id": self.topic_id,
+                "score": 85.0,
+                "performance_id": 999999,
+            },
+        )
+
+        assert response.status_code == 422
+
+    def test_unauthenticated_user_cannot_access_performance(self):
+        app.dependency_overrides.pop(
+            get_current_student,
+            None,
+        )
+
+        response = self.client.get(
+            f"/performance/student/{self.student_id}"
+        )
+
+        assert response.status_code == 401
+
+    # ---------------------------------------------------------
     # STUDY PLAN ENDPOINTS
     # ---------------------------------------------------------
 
@@ -562,6 +766,7 @@ class TestAPIRoutes:
         assert response.status_code == 201
 
         body = response.json()
+
         assert body["student_id"] == self.student_id
         assert body["status"] == "active"
         assert body["plan_id"] is not None
@@ -596,6 +801,90 @@ class TestAPIRoutes:
         assert response.json()["status"] == "active"
 
     # ---------------------------------------------------------
+    # STUDY PLAN AUTHORIZATION TESTS
+    # ---------------------------------------------------------
+
+    def test_create_study_plan_for_another_student_is_rejected(self):
+        other_student, _ = self.create_other_student_with_plan()
+
+        now = datetime.now().replace(microsecond=0)
+
+        response = self.client.post(
+            "/study-plans/",
+            json={
+                "student_id": other_student.student_id,
+                "start_date": now.isoformat(),
+                "end_date": (
+                    now + timedelta(days=5)
+                ).isoformat(),
+                "status": "active",
+            },
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == (
+            "You cannot create a study plan for another student."
+        )
+
+    def test_cannot_list_another_students_study_plans(self):
+        other_student, _ = self.create_other_student_with_plan()
+
+        response = self.client.get(
+            f"/study-plans/student/{other_student.student_id}"
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == (
+            "You cannot access another student's study plans."
+        )
+
+    def test_cannot_access_another_students_active_plan(self):
+        other_student, _ = self.create_other_student_with_plan()
+
+        response = self.client.get(
+            f"/study-plans/student/{other_student.student_id}/active"
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == (
+            "You cannot access another student's study plans."
+        )
+
+    def test_cannot_access_another_students_plan_by_id(self):
+        _, other_plan = self.create_other_student_with_plan()
+
+        response = self.client.get(
+            f"/study-plans/{other_plan.plan_id}"
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Study plan not found."
+
+    def test_student_can_list_own_study_plans(self):
+        response = self.client.get(
+            f"/study-plans/student/{self.student_id}"
+        )
+
+        assert response.status_code == 200
+
+        plans = response.json()
+
+        assert any(
+            plan["plan_id"] == self.plan_id
+            and plan["student_id"] == self.student_id
+            for plan in plans
+        )
+
+    def test_student_can_access_own_study_plan_by_id(self):
+        response = self.client.get(
+            f"/study-plans/{self.plan_id}"
+        )
+
+        assert response.status_code == 200
+        assert response.json()["plan_id"] == self.plan_id
+        assert response.json()["student_id"] == self.student_id
+
+    # ---------------------------------------------------------
     # STUDY PLAN ITEM ENDPOINTS
     # ---------------------------------------------------------
 
@@ -607,6 +896,7 @@ class TestAPIRoutes:
         assert response.status_code == 200
 
         items = response.json()
+
         assert len(items) == 1
         assert items[0]["item_id"] == self.item_id
         assert items[0]["status"] == "pending"

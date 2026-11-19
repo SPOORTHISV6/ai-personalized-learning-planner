@@ -1,0 +1,24 @@
+﻿CONTENT-BASED RETRIEVAL EVALUATION BASELINE
+Date: 2026-11-15
+
+Queries evaluated: 8
+Topics evaluated: 4
+
+Overall:
+Precision@5: 52.50%
+Recall@5: 72.29%
+MRR@5: 1.0000
+nDCG@5: 0.7706
+
+Topic-wise:
+Normalization: Precision 70%, Recall 80%, nDCG 0.7997
+SQL Joins: Precision 50%, Recall 55%, nDCG 0.6541
+Python: Precision 50%, Recall 70.83%, nDCG 0.7458
+SQL Basics: Precision 40%, Recall 83.33%, nDCG 0.8827
+
+Evaluation method:
+Manually reviewed binary relevance labels.
+Top 5 retrieved chunks evaluated per query.
+
+Existing FAISS indexes were not modified.
+Existing retrieval evaluator was not modified.

@@ -28,6 +28,8 @@ def _read_required_env(name: str) -> str:
 def _validate_mysql_url(
     env_name: str,
     expected_database: str,
+    expected_username: str | None = None,
+    expected_host: str | None = None,
 ) -> str:
     database_url = _read_required_env(env_name)
 
@@ -54,14 +56,51 @@ def _validate_mysql_url(
             f"{env_name} must contain database credentials."
         )
 
+    if (
+        expected_username is not None
+        and parsed_url.username != expected_username
+    ):
+        raise RuntimeError(
+            f"{env_name} must use the {expected_username} account."
+        )
+
+    if (
+        expected_host is not None
+        and parsed_url.host != expected_host
+    ):
+        raise RuntimeError(
+            f"{env_name} must connect through {expected_host}."
+        )
+
     return database_url
 
 
 def get_database_url() -> str:
-    """Return the application database URL.
+    """Return the main application database URL by default.
 
-    The application must never connect to the integration-test database.
+    Local application mode uses the main application database.
+
+    Browser testing requires an explicit APP_USE_BROWSER_TEST_DB=1
+    setting and a dedicated restricted database account.
     """
+    browser_test_mode = os.getenv(
+        "APP_USE_BROWSER_TEST_DB",
+        "0",
+    ).strip()
+
+    if browser_test_mode not in {"0", "1"}:
+        raise RuntimeError(
+            "APP_USE_BROWSER_TEST_DB must be either 0 or 1."
+        )
+
+    if browser_test_mode == "1":
+        return _validate_mysql_url(
+            "BROWSER_TEST_DATABASE_URL",
+            "ai_learning_planner_browser_test",
+            expected_username="browser_test_app",
+            expected_host="localhost",
+        )
+
     return _validate_mysql_url(
         "DATABASE_URL",
         "ai_learning_planner",
@@ -73,6 +112,28 @@ def get_test_database_url() -> str:
     return _validate_mysql_url(
         "TEST_DATABASE_URL",
         "ai_learning_planner_test",
+    )
+
+
+def get_backup_database_url() -> str:
+    """Return the dedicated database URL used only for backups.
+
+    Backup operations must never connect to the integration-test database.
+    """
+    return _validate_mysql_url(
+        "BACKUP_DATABASE_URL",
+        "ai_learning_planner",
+    )
+
+
+def get_restore_database_url() -> str:
+    """Return the isolated database URL used only for backup restoration.
+
+    Restoration must never target the application or integration-test DB.
+    """
+    return _validate_mysql_url(
+        "RESTORE_DATABASE_URL",
+        "ai_learning_planner_restore_test",
     )
 
 

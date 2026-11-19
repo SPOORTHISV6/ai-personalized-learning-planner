@@ -18,6 +18,7 @@ class LearningState(TypedDict, total=False):
 
     # RESOURCES
     resources: List[Dict[str, Any]]
+    resource_warnings: List[str]
 
     # STUDY PLAN
     study_plan: Dict[str, Any]
@@ -34,15 +35,14 @@ class LearningState(TypedDict, total=False):
 
     # WORKFLOW CONTROL
     next_action: str
+    workflow_failed: bool
     user_feedback: str
 
-    
     # SESSION LIFECYCLE
     workflow_mode: str
     session_action: str
     session_item_id: int
     session_lifecycle_result: Dict[str, Any]
-
 
     # ERRORS
     errors: List[str]

@@ -227,7 +227,22 @@ class TestDashboardDataIntegrity:
         return self.client.get(
             f"/dashboard/student/{self.student_id}"
         )
+    def test_student_cannot_access_another_students_dashboard(self):
+        response = self.client.get(
+            f"/dashboard/student/{self.other_student_id}"
+        )
 
+        assert response.status_code == 404
+
+    def test_unauthenticated_user_cannot_access_dashboard(self):
+        app.dependency_overrides.pop(
+            get_current_student,
+            None,
+        )
+
+        response = self.get_dashboard()
+
+        assert response.status_code == 401
     def test_foreign_topic_performance_does_not_affect_dashboard(
         self,
     ):

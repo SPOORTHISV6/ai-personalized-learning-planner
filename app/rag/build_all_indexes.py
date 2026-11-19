@@ -222,43 +222,40 @@ def is_page_artifact(line, index_name):
 # ============================================================
 
 def extract_pdf_text(pdf_path, index_name):
+    """
+    Extract PDF text while removing footer blocks by page position.
+
+    Repeated instructional content, SQL statements, Python code,
+    and functional dependencies are preserved.
+    """
     pages = []
 
     try:
         with fitz.open(pdf_path) as document:
-            line_counts = {}
-
-            for page in document:
-                for raw_line in page.get_text("text").splitlines():
-                    line = normalize_line(raw_line)
-
-                    if 4 <= len(line) <= 90:
-                        key = line.casefold()
-                        line_counts[key] = line_counts.get(key, 0) + 1
-
-            repeated_lines = {
-                line
-                for line, count in line_counts.items()
-                if count >= max(3, int(len(document) * 0.5))
-            }
-
             for page_number, page in enumerate(document, start=1):
+                page_height = page.rect.height
                 kept_lines = []
 
-                for raw_line in page.get_text("text").splitlines():
-                    line = normalize_line(raw_line)
+                for block in page.get_text("blocks"):
+                    y0 = block[1]
+                    block_text = block[4]
 
-                    if not line:
-                        kept_lines.append("")
+                    # Remove only text blocks in the bottom 6% of
+                    # the page, where the document footers appear.
+                    if y0 >= page_height * 0.94:
                         continue
 
-                    if line.casefold() in repeated_lines:
-                        continue
+                    for raw_line in block_text.splitlines():
+                        line = normalize_line(raw_line)
 
-                    if is_page_artifact(line, index_name):
-                        continue
+                        if not line:
+                            kept_lines.append("")
+                            continue
 
-                    kept_lines.append(line)
+                        if is_page_artifact(line, index_name):
+                            continue
+
+                        kept_lines.append(line)
 
                 text = clean_text("\n".join(kept_lines))
 

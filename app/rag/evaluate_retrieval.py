@@ -332,16 +332,16 @@ def evaluate_query(topic, test, store):
 
     hit_rate = 1.0 if relevant_top_k > 0 else 0.0
 
-    reciprocal_rank_sum = sum(
-        1.0 / rank
-        for rank in expected_ranks.values()
+    # Standard MRR: use the rank of the first relevant result.
+    first_relevant_rank = min(
+        expected_ranks.values(),
+        default=None
     )
 
-    # For multiple expected sections, average reciprocal rank
-    # across all expected sections, including missing sections.
     mrr = (
-        reciprocal_rank_sum / total_expected
-        if total_expected
+        1.0 / first_relevant_rank
+        if first_relevant_rank is not None
+        and first_relevant_rank <= DIAGNOSTIC_K
         else 0.0
     )
 

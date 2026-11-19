@@ -1,3 +1,4 @@
+
 import uuid
 
 import pytest
@@ -370,7 +371,32 @@ class TestQuizResultSecurity:
         assert response.json()["detail"] == "Quiz not found."
 
     # =====================================================
-    # TEST 2: FOREIGN AND NONEXISTENT QUIZ SAME RESPONSE
+    # TEST 2: CANNOT SUBMIT USING ANOTHER STUDENT'S ID
+    # =====================================================
+
+    def test_cannot_submit_with_another_students_id(self):
+
+        submission = self.valid_submission()
+
+        # Tamper with the submitted student ID.
+        submission["student_id"] = self.other_student_id
+
+        response = self.client.post(
+            "/quiz-results/",
+            params={
+                "quiz_id": self.quiz_id,
+            },
+            json=submission,
+        )
+
+        assert response.status_code == 403
+
+        assert response.json()["detail"] == (
+            "You cannot submit results for another student."
+        )
+
+    # =====================================================
+    # TEST 3: FOREIGN AND NONEXISTENT QUIZ SAME RESPONSE
     # =====================================================
 
     def test_foreign_and_nonexistent_quiz_return_same_response(self):
@@ -402,7 +428,7 @@ class TestQuizResultSecurity:
         )
 
     # =====================================================
-    # TEST 3: WORKFLOW EXCEPTION DOES NOT EXPOSE INTERNAL ERROR
+    # TEST 4: WORKFLOW EXCEPTION DOES NOT EXPOSE INTERNAL ERROR
     # =====================================================
 
     def test_workflow_exception_does_not_expose_internal_error(
@@ -445,7 +471,7 @@ class TestQuizResultSecurity:
         ]
 
     # =====================================================
-    # TEST 4: NESTED AGENT ERRORS ARE SANITIZED
+    # TEST 5: NESTED AGENT ERRORS ARE SANITIZED
     # =====================================================
 
     def test_nested_agent_errors_are_sanitized(
@@ -509,7 +535,7 @@ class TestQuizResultSecurity:
         )
 
     # =====================================================
-    # TEST 5: QUIZ RESULT MUST BE SAVED IF WORKFLOW FAILS
+    # TEST 6: QUIZ RESULT MUST BE SAVED IF WORKFLOW FAILS
     # =====================================================
 
     def test_quiz_result_is_saved_when_workflow_fails(
@@ -547,12 +573,7 @@ class TestQuizResultSecurity:
 
         result_id = data["result_id"]
 
-        # -------------------------------------------------
-        # IMPORTANT:
         # Verify persistence using a completely new session.
-        # Do not use the fixture session for this verification.
-        # -------------------------------------------------
-
         verification_db = TestSessionLocal()
 
         try:
@@ -594,7 +615,7 @@ class TestQuizResultSecurity:
             verification_db.close()
 
     # =====================================================
-    # TEST 6: STUDENT CANNOT ACCESS ANOTHER STUDENT'S RESULTS
+    # TEST 7: STUDENT CANNOT ACCESS ANOTHER STUDENT'S RESULTS
     # =====================================================
 
     def test_cannot_retrieve_another_students_results(self):
@@ -608,7 +629,7 @@ class TestQuizResultSecurity:
         assert response.json()["detail"] == "Student not found."
 
     # =====================================================
-    # TEST 7: STUDENT CANNOT ACCESS ANOTHER STUDENT'S QUIZ RESULTS
+    # TEST 8: STUDENT CANNOT ACCESS ANOTHER STUDENT'S QUIZ RESULTS
     # =====================================================
 
     def test_cannot_retrieve_results_for_another_students_quiz(self):
@@ -620,3 +641,43 @@ class TestQuizResultSecurity:
         assert response.status_code == 404
 
         assert response.json()["detail"] == "Quiz not found."
+
+    # =====================================================
+    # TEST 9: STOPPED WORKFLOW WITHOUT ERRORS IS NOT COMPLETED
+    # =====================================================
+
+    def test_stopped_workflow_without_errors_is_not_completed(
+        self,
+        monkeypatch,
+    ):
+
+        def stopped_workflow(state):
+
+            return {
+                "next_action": "stop",
+                "errors": [],
+            }
+
+        monkeypatch.setattr(
+            quiz_result_routes.adaptive_workflow,
+            "invoke",
+            stopped_workflow,
+        )
+
+        response = self.client.post(
+            "/quiz-results/",
+            params={
+                "quiz_id": self.quiz_id,
+            },
+            json=self.valid_submission(),
+        )
+
+        assert response.status_code == 200
+
+        data = response.json()
+
+        assert data["workflow_status"] == "completed_with_errors"
+
+        assert data["errors"] == [
+            SAFE_WORKFLOW_ERROR
+        ]

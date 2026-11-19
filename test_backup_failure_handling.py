@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.database import backup_manager
-from app.database import google_drive_backup
+from app.database import encrypted_google_drive_backup
 
 
 # --------------------------------------------------
@@ -22,12 +22,12 @@ def test_cloud_failure_preserves_local_backup():
 
     with tempfile.TemporaryDirectory() as temp_dir:
 
-        backup_path = Path(temp_dir) / "ai_learning_planner_test.sql"
-
-        backup_path.write_text(
-            "-- Simulated verified SQL backup\n",
-            encoding="utf-8"
+        backup_path = (
+            Path(temp_dir)
+            / "ai_learning_planner_20261114_120000.sql.enc"
         )
+
+        backup_path.write_bytes(b"simulated encrypted backup data")
 
         output = StringIO()
 
@@ -39,18 +39,7 @@ def test_cloud_failure_preserves_local_backup():
                 return_value=backup_path
             ) as mock_create_backup,
             patch.object(
-                google_drive_backup,
-                "check_oauth_health",
-                return_value={
-                    "status": "REAUTH_REQUIRED",
-                    "token_file_exists": True,
-                    "refresh_token_present": False,
-                    "access_token_valid": False,
-                    "message": "Manual authentication required."
-                }
-            ),
-            patch.object(
-                google_drive_backup,
+                encrypted_google_drive_backup,
                 "upload_backup",
                 side_effect=RuntimeError(
                     "Simulated Google Drive authentication failure"
@@ -73,11 +62,15 @@ def test_cloud_failure_preserves_local_backup():
             "Local backup creation attempted":
                 mock_create_backup.called,
 
-            "Cloud upload attempted":
+            "Encrypted cloud upload attempted":
                 mock_upload.called,
 
-            "Local backup still exists":
+            "Local encrypted backup still exists":
                 backup_path.exists(),
+
+            "Local backup contents preserved":
+                backup_path.read_bytes()
+                == b"simulated encrypted backup data",
 
             "Exit code is 2":
                 exit_code == 2,
@@ -87,6 +80,9 @@ def test_cloud_failure_preserves_local_backup():
 
             "Cloud backup failure reported":
                 "CLOUD BACKUP RESULT: FAILED" in captured_output,
+
+            "Local backup preservation reported":
+                "LOCAL BACKUP RESULT: PRESERVED" in captured_output,
         }
 
         for name, passed in checks.items():
@@ -127,7 +123,7 @@ def test_local_failure_stops_cloud_upload():
             )
         ),
         patch.object(
-            google_drive_backup,
+            encrypted_google_drive_backup,
             "upload_backup"
         ) as mock_upload
     ):
